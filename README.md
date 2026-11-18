@@ -252,6 +252,9 @@ projects and concurrent updates.
 General requirements:
 
 1. `NODE_ENV=production`, a strong `SESSION_SECRET`, real `OIDC_*` values and `DEV_AUTH_ENABLED=false`.
+   While the identity provider credentials are not available, the server also
+   starts with only `ADMIN_USERNAME` and `ADMIN_PASSWORD` set; then only the
+   administrator can sign in.
 2. Serve the application behind an HTTPS reverse proxy. Session cookies are
    `Secure` in production and the app trusts one proxy hop (`X-Forwarded-*`).
 3. `npm ci --omit=dev`, `npm run migrate`, then `npm start` under a process manager.
@@ -264,14 +267,21 @@ Proxmox container.
 
 1. Copy `proxmox/config.env.example` to `proxmox/config.env` and set the SSH
    port and user of the **kanban** container. `config.env` is ignored by Git.
-2. Prepare the server once (Node.js, pm2, MySQL, database and MySQL user):
+2. Create the server's configuration from `.env.example` in a local file named
+   `kanban.env` (do not commit it) and send it:
+
+   ```bash
+   cd proxmox && ./proxmoxSendFile.sh ../kanban.env
+   ```
+
+3. Prepare the server once. It installs what is missing (MySQL, curl, Node.js,
+   pm2) and creates the database and MySQL user named in `kanban.env`. The
+   server asks for the sudo password in your terminal:
 
    ```bash
    cd proxmox && ./proxmoxInstall.sh
    ```
 
-3. Create the server's `.env` from `.env.example` and place it at
-   `~/nodejs_server/.env` on the server (`./proxmoxSendFile.sh` helps).
 4. Deploy the committed and pushed `main` branch:
 
    ```bash
@@ -281,11 +291,13 @@ Proxmox container.
    The script packages only committed files, keeps the server's `.env`, dumps the database before migrating, runs the migrations,
    restarts the app with pm2, checks `/health` and rolls the code back if the
    new version does not start. `DEPLOY_DRY_RUN=1 ./proxmoxDeploy.sh` only
-   builds and verifies the package.
+   builds and verifies the package. If `~/nodejs_server` already holds a different
+   application, the deploy stops; `DEPLOY_REPLACE_EXISTING=1 ./proxmoxDeploy.sh`
+   moves that application aside and installs this one.
 
 | Script | Purpose |
 |---|---|
-| `proxmoxInstall.sh` | One-time server preparation |
+| `proxmoxInstall.sh` | One-time server preparation (asks for the sudo password) |
 | `proxmoxDeploy.sh` | Deploy `main` with backup, migrations and health check |
 | `proxmoxBackup.sh` | Download a database dump and the server `.env` into `backups/` |
 | `proxmoxConnect.sh` | Open an SSH session |

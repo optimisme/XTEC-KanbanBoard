@@ -8,6 +8,8 @@
 # MySQL database is dumped, so a failed release can be rolled back.
 #
 # DEPLOY_DRY_RUN=1 builds and verifies the package without contacting the server.
+# DEPLOY_REPLACE_EXISTING=1 replaces a different application found in
+# ~/nodejs_server (it is moved aside to ~/nodejs_server.replaced-<date>).
 set -euo pipefail
 
 ORIGINAL_DIR=$(pwd)
@@ -96,11 +98,12 @@ rm -f "$ZIP_NAME"
 
 ssh -T -p "$PORT_SSH" -o UpdateHostKeys=no \
   "$DEPLOY_USER@$HOST" \
-  bash -s -- "$SERVER_PORT" "$LOCAL_HEAD" << 'EOF'
+  bash -s -- "$SERVER_PORT" "$LOCAL_HEAD" "${DEPLOY_REPLACE_EXISTING:-0}" << 'EOF'
 set -euo pipefail
 
 SERVER_PORT="$1"
 RELEASE_SHA="$2"
+REPLACE_EXISTING="${3:-0}"
 APP_NAME="educational-kanban"
 APP_DIR="$HOME/nodejs_server"
 PKG="$HOME/server-package.zip"
@@ -150,20 +153,67 @@ export PATH="$HOME/.npm-global/bin:/usr/local/bin:$PATH"
 
 mkdir -p "$APP_DIR"
 
-# Never overwrite a different application that may live in this account.
-if [[ -f "$APP_DIR/package.json" ]]; then
-  CURRENT_NAME="$(node -p "require('$APP_DIR/package.json').name" 2>/dev/null || true)"
-  if [[ "$CURRENT_NAME" != "$APP_NAME" ]]; then
-    echo "Error: $APP_DIR conté una altra aplicació (${CURRENT_NAME:-desconeguda}); deploy cancel·lat."
+# The server owns its configuration. On the first deploy it can be handed
+# over as ~/kanban.env (sent with proxmoxSendFile.sh); it is then moved into place.
+FIRST_ENV="$HOME/kanban.env"
+
+# Preflight: nothing on the server is stopped, moved or replaced unless the
+# tools and the database this application needs are really there.
+ENV_SOURCE="$APP_DIR/.env"
+if [[ -f "$FIRST_ENV" ]]; then ENV_SOURCE="$FIRST_ENV"; fi
+if [[ -f "$ENV_SOURCE" ]]; then
+  for tool in node npm pm2 unzip rsync curl mysql mysqldump; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      echo "Error: falta '$tool' al servidor. Executa primer ./proxmoxInstall.sh; no s'ha modificat res."
+      exit 1
+    fi
+  done
+  pre_env() {
+    node -e "const v = require('node:util').parseEnv(require('node:fs').readFileSync(process.argv[1], 'utf8'))[process.argv[2]]; process.stdout.write(v || '')" "$ENV_SOURCE" "$1"
+  }
+  if ! MYSQL_PWD="$(pre_env DB_PASSWORD)" mysql -h "$(pre_env DB_HOST)" -P "$(pre_env DB_PORT)" \
+      -u "$(pre_env DB_USER)" "$(pre_env DB_NAME)" -e 'SELECT 1' >/dev/null 2>&1; then
+    echo "Error: no es pot connectar a la base de dades '$(pre_env DB_NAME)' amb l'usuari '$(pre_env DB_USER)'."
+    echo "Executa primer ./proxmoxInstall.sh; no s'ha modificat res."
     exit 1
   fi
 fi
 
-# The server owns its configuration. It must exist before the first deploy.
+# Never overwrite a different application that may live in this account,
+# unless the deploy was started with DEPLOY_REPLACE_EXISTING=1. Even then the
+# other application is moved aside, not deleted.
+if [[ -f "$APP_DIR/package.json" ]]; then
+  CURRENT_NAME="$(node -p "require('$APP_DIR/package.json').name" 2>/dev/null || true)"
+  if [[ "$CURRENT_NAME" != "$APP_NAME" ]]; then
+    if [[ "$REPLACE_EXISTING" != "1" ]]; then
+      echo "Error: $APP_DIR conté una altra aplicació (${CURRENT_NAME:-desconeguda}); deploy cancel·lat."
+      echo "Si és l'aplicació d'exemple d'aquest servidor i la vols substituir, torna a executar:"
+      echo "  DEPLOY_REPLACE_EXISTING=1 ./proxmoxDeploy.sh"
+      echo "L'aplicació actual es mourà a una carpeta de còpia, no s'esborrarà."
+      exit 1
+    fi
+    if [[ ! -f "$FIRST_ENV" ]]; then
+      echo "Error: abans de substituir l'aplicació cal el fitxer de configuració a $FIRST_ENV."
+      echo "Crea'l a partir de .env.example (NODE_ENV=production) i envia'l amb:  ./proxmoxSendFile.sh kanban.env"
+      exit 1
+    fi
+    REPLACED_DIR="$HOME/nodejs_server.replaced-$(date -u +%Y%m%dT%H%M%SZ)"
+    pm2 delete app >/dev/null 2>&1 || true
+    mv "$APP_DIR" "$REPLACED_DIR"
+    mkdir -p "$APP_DIR"
+    echo "L'aplicació anterior (${CURRENT_NAME:-desconeguda}) s'ha mogut a $REPLACED_DIR"
+  fi
+fi
+
+if [[ ! -f "$APP_DIR/.env" && -f "$FIRST_ENV" ]]; then
+  mv "$FIRST_ENV" "$APP_DIR/.env"
+  echo "Configuració instal·lada a $APP_DIR/.env"
+fi
 if [[ ! -f "$APP_DIR/.env" ]]; then
   echo "Error: falta $APP_DIR/.env."
-  echo "Crea'l a partir de .env.example (NODE_ENV=production) i envia'l amb:"
-  echo "  ./proxmoxSendFile.sh <fitxer_env>   i després, al servidor:   mv ~/<fitxer_env> $APP_DIR/.env && chmod 600 $APP_DIR/.env"
+  echo "Crea un fitxer kanban.env a partir de .env.example (NODE_ENV=production) i envia'l amb:"
+  echo "  ./proxmoxSendFile.sh kanban.env"
+  echo "El proper deploy el col·locarà a $APP_DIR/.env."
   exit 1
 fi
 chmod 600 "$APP_DIR/.env"

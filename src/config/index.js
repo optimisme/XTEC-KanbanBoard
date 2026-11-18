@@ -61,9 +61,6 @@ if (oidc.callbackUrl) {
 if (!['google', 'microsoft'].includes(oidc.provider)) {
   errors.push('OIDC_PROVIDER must be "google" or "microsoft"');
 }
-if (isProduction && !oidc.configured) {
-  errors.push('OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_CALLBACK_URL are required in production');
-}
 // Optional local administrator account (username + password from .env).
 const adminLogin = { username: optional('ADMIN_USERNAME'), password: env.ADMIN_PASSWORD || '' };
 adminLogin.enabled = Boolean(adminLogin.username && adminLogin.password);
@@ -84,6 +81,11 @@ if (isProduction && adminLogin.enabled) {
   }
 }
 
+// Production needs a way to sign in: the identity provider, or at least the
+// administrator account while the provider credentials are not available yet.
+if (isProduction && !oidc.configured && !adminLogin.enabled) {
+  errors.push('In production configure the OIDC_* variables, or ADMIN_USERNAME and ADMIN_PASSWORD until they are available');
+}
 if (!isProduction && !oidc.configured && !devAuthEnabled && !adminLogin.enabled) {
   errors.push('Configure the OIDC_* variables or set DEV_AUTH_ENABLED=true for local development');
 }
