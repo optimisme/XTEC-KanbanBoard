@@ -25,7 +25,7 @@ const LOGIN_ERRORS = {
   domain_not_allowed: 'Només es permeten comptes del domini institucional.',
   email_not_verified: "El proveïdor d'identitat no ha verificat el teu correu.",
   identity_conflict: 'Aquest correu ja està associat a una altra identitat.',
-  oidc_not_configured: "L'autenticació institucional encara no està configurada.",
+  oidc_not_configured: "L'accés amb el compte institucional encara no està disponible.",
   login_expired: "La sessió d'inici ha caducat. Torna-ho a provar.",
   login_failed: "No s'ha pogut iniciar la sessió. Torna-ho a provar.",
 };
@@ -42,17 +42,20 @@ async function logout() {
 
 // ---- Screens shown outside the application ------------------------------------
 
-function centerScreen(...children) {
-  append(clear(root), 
+// A centered card. `below` is optional content shown under the card.
+function centerScreen(children, below = null) {
+  append(clear(root),
     h('main', { class: 'center-screen', id: 'main' },
-      h('div', { class: 'card center-card' }, h('img', { src: '/assets/favicon.svg', alt: '' }), children))
+      h('div', { class: 'center-column' },
+        h('div', { class: 'card center-card' }, h('img', { src: '/assets/favicon.svg', alt: '' }), children),
+        below))
   );
 }
 
 function renderLogin() {
   const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
   const error = LOGIN_ERRORS[params.get('error')];
-  const { dev_auth: devAuth, oidc_configured: oidcConfigured } = state.session;
+  const { dev_auth: devAuth } = state.session;
 
   // One form for everyone who does not come through the identity provider:
   // the administrator from .env (username + password) and, in development
@@ -98,15 +101,18 @@ function renderLogin() {
     );
   }
 
-  centerScreen(
+  // Institutional sign-in, under the card. Before the identity provider is
+  // configured the server sends the visitor back here with a short message.
+  const providerName = state.session.oidc_provider === 'microsoft' ? 'Microsoft' : 'Google';
+  const oauth = h('div', { class: 'oauth-login' },
+    h('a', { class: 'btn primary', href: '/auth/login' }, `Entra amb ${providerName}`));
+
+  centerScreen([
     h('h1', {}, 'Kanban educatiu'),
     h('p', { class: 'muted' }, 'Gestió de projectes, grups i tasques de formació professional.'),
     error ? h('div', { class: 'notice error', role: 'alert' }, error) : null,
-    oidcConfigured
-      ? h('a', { class: 'btn primary', href: '/auth/login' }, 'Inicia la sessió amb el compte institucional')
-      : h('div', { class: 'notice' }, "L'autenticació institucional encara no està configurada."),
-    form
-  );
+    form,
+  ], oauth);
 }
 
 function renderAccountState(user) {
@@ -119,13 +125,13 @@ function renderAccountState(user) {
     disabled: ['Accés no autoritzat', 'Aquest compte està desactivat. Contacta amb administració si creus que és un error.'],
   };
   const [title, text] = messages[user.status];
-  centerScreen(
+  centerScreen([
     h('h1', {}, title),
     h('p', {}, text),
     h('p', { class: 'muted' }, user.email),
     user.status === 'pending' ? h('button', { class: 'btn', type: 'button', onClick: () => window.location.reload() }, 'Torna-ho a comprovar') : null,
-    h('button', { class: 'btn ghost', type: 'button', onClick: logout }, 'Tanca la sessió')
-  );
+    h('button', { class: 'btn ghost', type: 'button', onClick: logout }, 'Tanca la sessió'),
+  ]);
 }
 
 // ---- Shell -------------------------------------------------------------------------

@@ -31,6 +31,7 @@ export async function session(req, res) {
     dev_auth: config.devAuthEnabled,
     admin_login: config.adminLogin.enabled,
     oidc_configured: config.oidc.configured,
+    oidc_provider: config.oidc.provider,
   });
 }
 
