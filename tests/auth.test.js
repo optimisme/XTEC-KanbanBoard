@@ -124,3 +124,42 @@ test('logout ends the session and login regenerates the session id', async () =>
   assert.equal((await agent.post('/auth/logout').set('X-CSRF-Token', res.body.csrf_token)).status, 204);
   assert.equal((await agent.get('/api/projects')).status, 401);
 });
+
+test('administrator password login from .env', async () => {
+  const agent = request.agent(app);
+  const session = await agent.get('/api/session');
+  assert.equal(session.body.admin_login, true);
+  const post = (body, token = session.body.csrf_token) =>
+    agent.post('/auth/admin-login').set('X-CSRF-Token', token).send(body);
+
+  // Needs the CSRF token, and rejects wrong or malformed credentials.
+  assert.equal((await agent.post('/auth/admin-login').send({ username: 'admin', password: 'test-admin-password' })).status, 403);
+  assert.equal((await post({ username: 'admin', password: 'wrong' })).status, 401);
+  assert.equal((await post({ username: 'other', password: 'test-admin-password' })).status, 401);
+  assert.equal((await post({ username: { $ne: '' }, password: ['x'] })).status, 401);
+
+  const ok = await post({ username: 'admin', password: 'test-admin-password' });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.user.role, 'admin');
+  assert.equal(ok.body.user.status, 'active');
+  assert.equal((await agent.get('/api/users')).status, 200);
+
+  // Logging in again reuses the same account.
+  const again = await login('admin@xtec.cat');
+  const locals = (await again.get('/api/users')).body.filter((u) => u.email === 'admin@local.invalid');
+  assert.equal(locals.length, 1);
+});
+
+test('administrator login is locked after repeated failures', async () => {
+  const agent = request.agent(app);
+  const session = await agent.get('/api/session');
+  const post = (password) =>
+    agent.post('/auth/admin-login').set('X-CSRF-Token', session.body.csrf_token).send({ username: 'admin', password });
+
+  for (let i = 0; i < 5; i += 1) assert.equal((await post('wrong')).status, 401);
+  assert.equal((await post('wrong')).status, 429);
+  // Even the right password is refused while the address is locked.
+  const locked = await post('test-admin-password');
+  assert.equal(locked.status, 429);
+  assert.equal(locked.body.error.code, 'too_many_attempts');
+});

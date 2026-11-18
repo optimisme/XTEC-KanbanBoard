@@ -64,7 +64,27 @@ if (!['google', 'microsoft'].includes(oidc.provider)) {
 if (isProduction && !oidc.configured) {
   errors.push('OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_CALLBACK_URL are required in production');
 }
-if (!isProduction && !oidc.configured && !devAuthEnabled) {
+// Optional local administrator account (username + password from .env).
+const adminLogin = { username: optional('ADMIN_USERNAME'), password: env.ADMIN_PASSWORD || '' };
+adminLogin.enabled = Boolean(adminLogin.username && adminLogin.password);
+if ((adminLogin.username || adminLogin.password) && !adminLogin.enabled) {
+  errors.push('ADMIN_USERNAME and ADMIN_PASSWORD must be set together (or both left empty)');
+}
+if (adminLogin.username && !/^[A-Za-z0-9._-]{1,50}$/.test(adminLogin.username)) {
+  errors.push('ADMIN_USERNAME may only contain letters, numbers, dots, dashes and underscores');
+}
+if (isProduction && adminLogin.enabled) {
+  // A guessable administrator password on a public server is never acceptable.
+  const weak =
+    adminLogin.password.length < 12 ||
+    adminLogin.password.toLowerCase().includes(adminLogin.username.toLowerCase()) ||
+    /^(password|contrasenya|123456|qwerty)/i.test(adminLogin.password);
+  if (weak) {
+    errors.push('ADMIN_PASSWORD is too weak for production: use at least 12 characters and do not include the username');
+  }
+}
+
+if (!isProduction && !oidc.configured && !devAuthEnabled && !adminLogin.enabled) {
   errors.push('Configure the OIDC_* variables or set DEV_AUTH_ENABLED=true for local development');
 }
 if (oidc.provider === 'microsoft' && /\/(common|organizations|consumers)\//.test(oidc.issuer)) {
@@ -91,6 +111,7 @@ const config = {
     password: env.DB_PASSWORD || '',
   },
   oidc,
+  adminLogin,
   // One or more institutional domains, comma separated.
   allowedEmailDomains: required('ALLOWED_EMAIL_DOMAIN')
     .toLowerCase()

@@ -110,6 +110,7 @@ configuration at startup and refuses to start when something is missing.
 | `OIDC_CALLBACK_URL` | Registered redirect URI. The callback route is served on its path |
 | `ALLOWED_EMAIL_DOMAIN` | Institutional domain(s), comma separated |
 | `INITIAL_ADMIN_EMAIL` | Account that becomes administrator on its first login |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Optional administrator with password login |
 | `SESSION_SECRET` | At least 32 random characters |
 | `UPLOAD_DIR`, `MAX_UPLOAD_SIZE_MB` | Evidence storage and size limit |
 | `DEV_AUTH_ENABLED` | Development-only login (see below) |
@@ -187,6 +188,16 @@ two ways to get the first one:
   The account is created (or promoted) as an active administrator and is bound
   to the institutional identity the first time it logs in.
 
+- **Username and password** (optional): set `ADMIN_USERNAME` and
+  `ADMIN_PASSWORD` in `.env`. The login screen then shows an *Accés
+  d'administració* form that signs in as a built-in administrator without the
+  identity provider. Leave both variables empty to disable it.
+  - The account is always an active administrator; it cannot be locked out
+    from the user screen.
+  - In production the server refuses to start unless the password has at
+    least 12 characters and does not contain the username.
+  - After 5 failed attempts an address is locked out for 15 minutes.
+
 Further administrators are appointed from **Usuaris** inside the application.
 
 ## Development server
@@ -218,6 +229,8 @@ DB_USER=root
 DB_PASSWORD=kanban_root_test
 ALLOWED_EMAIL_DOMAIN=xtec.cat,iesesteveterradas.cat
 SESSION_SECRET=test-session-secret-test-session-secret-0000
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=test-admin-password
 UPLOAD_DIR=./uploads/test
 MAX_UPLOAD_SIZE_MB=1
 DEV_AUTH_ENABLED=true
@@ -379,7 +392,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 
 | Area | Endpoints |
 |---|---|
-| Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/logout`, `GET /api/session` |
+| Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/admin-login`, `POST /auth/logout`, `GET /api/session` |
 | Users | `GET /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
 | Modules | `GET/POST /api/modules`, `PUT/DELETE /api/modules/:id` |
 | Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers` |

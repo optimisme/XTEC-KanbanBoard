@@ -80,6 +80,32 @@ function renderLogin() {
     );
   }
 
+  let adminForm = null;
+  if (state.session.admin_login) {
+    const username = h('input', { type: 'text', required: true, autocomplete: 'username', autocapitalize: 'none' });
+    const password = h('input', { type: 'password', required: true, autocomplete: 'current-password' });
+    const submit = h('button', { class: 'btn', type: 'submit' }, 'Entra com a administració');
+    adminForm = h(
+      'form',
+      {
+        class: 'dev-login',
+        onSubmit: (event) => {
+          event.preventDefault();
+          run(submit, async () => {
+            const result = await api.post('/auth/admin-login', { username: username.value, password: password.value });
+            setCsrfToken(result.csrf_token);
+            window.location.hash = '';
+            await start();
+          });
+        },
+      },
+      h('p', { class: 'muted' }, "Accés d'administració"),
+      field('Usuari', username),
+      field('Contrasenya', password),
+      submit
+    );
+  }
+
   centerScreen(
     h('h1', {}, 'Kanban educatiu'),
     h('p', { class: 'muted' }, 'Gestió de projectes, grups i tasques de formació professional.'),
@@ -87,6 +113,7 @@ function renderLogin() {
     oidcConfigured
       ? h('a', { class: 'btn primary', href: '/auth/login' }, 'Inicia la sessió amb el compte institucional')
       : h('div', { class: 'notice' }, "L'autenticació institucional encara no està configurada."),
+    adminForm,
     devForm
   );
 }

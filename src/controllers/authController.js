@@ -29,6 +29,7 @@ export async function session(req, res) {
     user: req.user ? authService.publicUser(req.user) : null,
     csrf_token: csrfToken(req),
     dev_auth: config.devAuthEnabled,
+    admin_login: config.adminLogin.enabled,
     oidc_configured: config.oidc.configured,
   });
 }
@@ -81,6 +82,44 @@ export async function devLogin(req, res) {
     emailVerified: true,
     name: v.text(req.body.name, 'nom', { max: 200, required: false }),
   });
+  await establishSession(req, user);
+  res.json({ user: authService.publicUser(user), csrf_token: csrfToken(req) });
+}
+
+// Failed administrator logins per client address: after MAX_FAILURES the
+// address must wait until the window ends. Kept in memory on purpose; it only
+// needs to slow down password guessing.
+const MAX_FAILURES = 5;
+const FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const failures = new Map();
+
+function failureEntry(key) {
+  const entry = failures.get(key);
+  if (entry && entry.resetAt > Date.now()) return entry;
+  failures.delete(key);
+  return null;
+}
+
+// POST /auth/admin-login — username and password of the administrator
+// configured in .env. Only registered when those variables are set.
+export async function adminLogin(req, res) {
+  const key = req.ip;
+  const entry = failureEntry(key);
+  if (entry && entry.count >= MAX_FAILURES) {
+    throw new HttpError(429, 'too_many_attempts', "Massa intents fallits. Torna-ho a provar d'aquí a uns minuts.");
+  }
+
+  const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
+  const user = await authService.loginLocalAdmin(username, password);
+  if (!user) {
+    const current = entry || { count: 0, resetAt: Date.now() + FAILURE_WINDOW_MS };
+    current.count += 1;
+    failures.set(key, current);
+    throw new HttpError(401, 'invalid_credentials', "L'usuari o la contrasenya no són correctes.");
+  }
+
+  failures.delete(key);
   await establishSession(req, user);
   res.json({ user: authService.publicUser(user), csrf_token: csrfToken(req) });
 }
