@@ -257,7 +257,10 @@ td.actions .btn + .btn { margin-left: 6px; }
 
 .board {
   display: grid; grid-template-columns: repeat(4, minmax(250px, 1fr)); gap: 16px;
-  align-items: start; overflow-x: auto; padding-bottom: 12px;
+  /* Columns stretch to the same height and fill the screen, so the whole
+     column is a drop target and not just the area around its cards. */
+  align-items: stretch; min-height: calc(100vh - 230px);
+  overflow-x: auto; padding-bottom: 12px;
 }
 .column {
   background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius);
