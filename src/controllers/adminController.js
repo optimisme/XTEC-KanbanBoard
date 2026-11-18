@@ -8,6 +8,10 @@ export async function listUsers(req, res) {
   res.json(await userService.list(req.query));
 }
 
+export async function createUser(req, res) {
+  res.status(201).json(await userService.create(req.body));
+}
+
 export async function updateUser(req, res) {
   res.json(await userService.update(req.user, v.id(req.params.id), req.body));
 }

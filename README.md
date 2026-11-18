@@ -200,6 +200,15 @@ two ways to get the first one:
 
 Further administrators are appointed from **Usuaris** inside the application.
 
+### Adding people in advance
+
+An administrator can add a person from **Usuaris → Afegeix un usuari** with
+their name, institutional email and role. The account is active immediately
+and can already be assigned to projects and groups. When that person signs in
+with the identity provider for the first time, the verified email links the
+account to their identity, so they get in without the approval step. People
+who are not added in advance still start as *pending*.
+
 ## Development server
 
 ```bash
@@ -402,7 +411,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 | Area | Endpoints |
 |---|---|
 | Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/admin-login`, `POST /auth/logout`, `GET /api/session` |
-| Users | `GET /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
+| Users | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
 | Modules | `GET/POST /api/modules`, `PUT/DELETE /api/modules/:id` |
 | Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers` |
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |

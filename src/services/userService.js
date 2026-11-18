@@ -1,3 +1,4 @@
+import config from '../config/index.js';
 import { db } from '../db/pool.js';
 import * as userRepo from '../repositories/userRepository.js';
 import { badRequest, conflict, notFound } from '../utils/errors.js';
@@ -17,6 +18,26 @@ function present(user) {
     created_at: user.created_at,
     updated_at: user.updated_at,
   };
+}
+
+// Adds a person by email before they have ever signed in. The account is
+// active from the start; on their first institutional login the verified
+// email links it to their identity, so no approval step is needed.
+export async function create(body) {
+  const email = v.email(body.email);
+  const name = v.text(body.name, 'nom', { max: 200 });
+  const role = v.oneOf(body.role, 'rol', ROLES);
+  const domain = email.slice(email.lastIndexOf('@') + 1);
+  if (!config.allowedEmailDomains.includes(domain)) {
+    throw badRequest(`El correu ha de ser d'un domini institucional (${config.allowedEmailDomains.join(', ')}).`);
+  }
+  try {
+    const id = await userRepo.create(db, { issuer: null, subject: null, email, name, role, status: 'active' });
+    return present(await userRepo.findById(db, id));
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') throw conflict('Ja existeix un usuari amb aquest correu.');
+    throw err;
+  }
 }
 
 export async function list(query) {

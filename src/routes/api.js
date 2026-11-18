@@ -20,6 +20,7 @@ router.patch('/profile', admin.updateProfile);
 
 // Users
 router.get('/users', adminOnly, admin.listUsers);
+router.post('/users', adminOnly, admin.createUser);
 router.patch('/users/:id', adminOnly, admin.updateUser);
 router.post('/users/:id/approve', adminOnly, admin.approveUser);
 router.post('/users/:id/reject', adminOnly, admin.rejectUser);

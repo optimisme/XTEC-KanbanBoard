@@ -31,6 +31,12 @@ export function text(value, field, { min = 1, max = 255, required = true } = {})
   return cleaned;
 }
 
+export function email(value, field = 'correu') {
+  const cleaned = text(value, field, { max: 255 }).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned)) throw badRequest(`El camp «${field}» ha de ser un correu vàlid.`);
+  return cleaned;
+}
+
 export function oneOf(value, field, allowed) {
   if (!allowed.includes(value)) throw badRequest(`El valor de «${field}» no és vàlid.`);
   return value;

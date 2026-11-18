@@ -163,3 +163,39 @@ test('administrator login is locked after repeated failures', async () => {
   assert.equal(locked.status, 429);
   assert.equal(locked.body.error.code, 'too_many_attempts');
 });
+
+test('users added in advance by email sign in without approval', async () => {
+  const admin = await login('admin@xtec.cat');
+  const created = await admin.post('/api/users', { name: 'Pre Teacher', email: 'Pre.Teacher@xtec.cat', role: 'teacher' });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.email, 'pre.teacher@xtec.cat');
+  assert.equal(created.body.status, 'active');
+  assert.equal(created.body.role, 'teacher');
+  assert.equal(created.body.last_login_at, null);
+
+  // Validation: duplicates, other domains, bad emails, bad roles, non-admins.
+  assert.equal((await admin.post('/api/users', { name: 'Again', email: 'pre.teacher@xtec.cat', role: 'student' })).status, 409);
+  assert.equal((await admin.post('/api/users', { name: 'Out', email: 'someone@gmail.com', role: 'teacher' })).status, 400);
+  assert.equal((await admin.post('/api/users', { name: 'Bad', email: 'not-an-email', role: 'teacher' })).status, 400);
+  assert.equal((await admin.post('/api/users', { name: 'Bad', email: 'x@xtec.cat', role: 'owner' })).status, 400);
+  assert.equal((await admin.post('/api/users', { name: '', email: 'y@xtec.cat', role: 'teacher' })).status, 400);
+  const teacher = await login('pending@xtec.cat'); // approved as a teacher earlier
+  assert.equal((await teacher.post('/api/users', { name: 'X', email: 'z@xtec.cat', role: 'admin' })).status, 403);
+
+  // First institutional login: recognised by the verified email, already active.
+  const first = await loginWithIdentity({
+    issuer: 'https://accounts.google.com', subject: 'google-pre-teacher', email: 'pre.teacher@xtec.cat',
+    emailVerified: true, name: 'Name From Google',
+  });
+  assert.equal(first.status, 'active');
+  assert.equal(first.role, 'teacher');
+  assert.equal(first.name, 'Pre Teacher'); // the name the administrator gave is kept
+  assert.ok(first.last_login_at);
+
+  // An unverified email never claims a pre-created account.
+  await admin.post('/api/users', { name: 'Other', email: 'other.person@xtec.cat', role: 'teacher' });
+  await assert.rejects(
+    loginWithIdentity({ issuer: 'https://accounts.google.com', subject: 's2', email: 'other.person@xtec.cat', emailVerified: false, name: 'X' }),
+    { code: 'email_not_verified' }
+  );
+});

@@ -79,18 +79,45 @@ export async function renderUsers(view, params, { user: me }) {
               h('td', { class: 'muted' }, u.email),
               h('td', {}, role),
               h('td', {}, h('span', { class: 'tag' }, USER_STATUS_LABELS[u.status])),
-              h('td', { class: 'muted' }, u.last_login_at ? formatDate(u.last_login_at) : '—'),
+              h('td', { class: 'muted' }, u.last_login_at ? formatDate(u.last_login_at) : 'Encara no ha entrat'),
               h('td', { class: 'actions' }, toggle));
           })))));
+  }
+
+  // Adds a person by email. They can sign in with the institutional account
+  // straight away, without waiting for approval.
+  function openAddUser() {
+    const name = h('input', { type: 'text', maxlength: '200', required: true, autocomplete: 'off' });
+    const email = h('input', { type: 'email', maxlength: '255', required: true, placeholder: 'nom@xtec.cat', autocomplete: 'off' });
+    const role = roleSelect('teacher', 'Rol');
+    const save = h('button', { class: 'btn primary', type: 'submit' }, "Afegeix l'usuari");
+    const form = h('form', {
+      onSubmit: (event) => {
+        event.preventDefault();
+        run(save, async () => {
+          const created = await api.post('/api/users', { name: name.value, email: email.value, role: role.value });
+          dialog.close();
+          toast(`${created.name} ja pot entrar amb el compte institucional.`);
+          await load();
+        });
+      },
+    },
+      field('Nom i cognoms', name),
+      field('Correu institucional', email, 'Ha de coincidir amb el correu del compte amb què iniciarà la sessió.'),
+      field('Rol', role),
+      h('div', { class: 'card-actions' }, save));
+    const dialog = modal({ title: 'Afegeix un usuari', body: form });
   }
 
   [statusFilter, roleFilter].forEach((el) => el.addEventListener('change', draw));
   search.addEventListener('input', draw);
 
   append(view, 
-    h('div', { class: 'page-header' }, h('div', { class: 'titles' },
-      h('h1', {}, 'Usuaris'),
-      h('p', { class: 'muted' }, 'Els comptes nous del domini institucional queden pendents fins que els aproves i els assignes un rol.'))),
+    h('div', { class: 'page-header' },
+      h('div', { class: 'titles' },
+        h('h1', {}, 'Usuaris'),
+        h('p', { class: 'muted' }, "Afegeix persones pel seu correu perquè entrin directament, o aprova els comptes nous que queden pendents.")),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onClick: openAddUser }, 'Afegeix un usuari'))),
     pendingEl,
     h('div', { class: 'toolbar' },
       h('label', { for: 'user-search', class: 'sr-only' }, 'Cerca'), search,
