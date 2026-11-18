@@ -109,7 +109,6 @@ function renderLogin() {
 
   centerScreen([
     h('h1', {}, 'Kanban educatiu'),
-    h('p', { class: 'muted' }, 'Gestió de projectes, grups i tasques de formació professional.'),
     error ? h('div', { class: 'notice error', role: 'alert' }, error) : null,
     form,
   ], oauth);
