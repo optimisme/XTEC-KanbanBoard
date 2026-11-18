@@ -92,16 +92,6 @@ export function comments(db, projectId, userId) {
   );
 }
 
-export function attachments(db, projectId, userId) {
-  return db.query(
-    `SELECT ${TASK_REF}, x.id, x.kind, x.title, x.url, x.created_at
-       FROM task_attachments x ${TASK_JOIN}
-      WHERE x.author_id = ?
-      ORDER BY x.created_at DESC`,
-    [projectId, userId]
-  );
-}
-
 // Responsibility events the student performed, received or lost.
 export function transfers(db, projectId, userId) {
   return db.query(

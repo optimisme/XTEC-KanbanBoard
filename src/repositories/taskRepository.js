@@ -1,4 +1,4 @@
-const COLUMNS = `td.id, td.project_id, td.title, td.description, td.acceptance_criteria, td.sort_order,
+const COLUMNS = `td.id, td.project_id, td.title, td.description, td.sort_order,
   td.version, td.author_id, u.name AS author_name, td.deleted_at, td.created_at, td.updated_at`;
 
 export async function findById(db, id) {
@@ -35,19 +35,19 @@ export async function nextSortOrder(db, projectId) {
   return Number(rows[0].next);
 }
 
-export async function create(db, { projectId, title, description, acceptanceCriteria, sortOrder, authorId }) {
+export async function create(db, { projectId, title, description, sortOrder, authorId }) {
   const result = await db.query(
-    `INSERT INTO task_definitions (project_id, title, description, acceptance_criteria, sort_order, author_id)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [projectId, title, description, acceptanceCriteria, sortOrder, authorId]
+    `INSERT INTO task_definitions (project_id, title, description, sort_order, author_id)
+     VALUES (?, ?, ?, ?, ?)`,
+    [projectId, title, description, sortOrder, authorId]
   );
   return result.insertId;
 }
 
-export async function update(db, id, { title, description, acceptanceCriteria, version }) {
+export async function update(db, id, { title, description, version }) {
   await db.query(
-    'UPDATE task_definitions SET title = ?, description = ?, acceptance_criteria = ?, version = ? WHERE id = ?',
-    [title, description, acceptanceCriteria, version, id]
+    'UPDATE task_definitions SET title = ?, description = ?, version = ? WHERE id = ?',
+    [title, description, version, id]
   );
 }
 
@@ -67,17 +67,17 @@ export async function setModules(db, taskId, projectId, moduleIds) {
   ]);
 }
 
-export async function insertVersion(db, { taskId, version, title, description, acceptanceCriteria, modules, userId }) {
+export async function insertVersion(db, { taskId, version, title, description, modules, userId }) {
   await db.query(
-    `INSERT INTO task_versions (task_id, version, title, description, acceptance_criteria, modules, modified_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [taskId, version, title, description, acceptanceCriteria, JSON.stringify(modules), userId]
+    `INSERT INTO task_versions (task_id, version, title, description, modules, modified_by)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [taskId, version, title, description, JSON.stringify(modules), userId]
   );
 }
 
 export function versions(db, taskId) {
   return db.query(
-    `SELECT tv.id, tv.task_id, tv.version, tv.title, tv.description, tv.acceptance_criteria, tv.modules,
+    `SELECT tv.id, tv.task_id, tv.version, tv.title, tv.description, tv.modules,
             tv.modified_by, u.name AS modified_by_name, tv.created_at
        FROM task_versions tv JOIN users u ON u.id = tv.modified_by
       WHERE tv.task_id = ? ORDER BY tv.version DESC`,

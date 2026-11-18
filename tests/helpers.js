@@ -6,7 +6,7 @@ import { migrate } from '../src/db/migrate.js';
 import { closePool, db, pool } from '../src/db/pool.js';
 
 const TABLES = [
-  'task_history', 'task_block_events', 'task_attachments', 'task_comments', 'group_tasks',
+  'task_history', 'task_block_events', 'task_comments', 'group_tasks',
   'task_versions', 'task_modules', 'task_definitions', 'group_students', 'project_groups',
   'project_modules', 'project_teachers', 'projects', 'modules', 'users', 'sessions',
 ];
@@ -102,7 +102,6 @@ export async function createScenario() {
     const res = await admin.post(`/api/projects/${project.id}/tasks`, {
       title,
       description: `Description of **${title}**`,
-      acceptance_criteria: '- It works',
       module_ids: moduleIds,
     });
     tasks.push(res.body);

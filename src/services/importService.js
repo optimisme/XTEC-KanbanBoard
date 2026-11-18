@@ -10,23 +10,20 @@ import { insertTask, list as listTasks } from './taskService.js';
 const MAX_MARKDOWN_LENGTH = 500000;
 const MODULES_LINE = /^\*\*(?:modules|mòduls|moduls)\s*:\*\*\s*(.*)$|^\*\*(?:modules|mòduls|moduls)\*\*\s*:\s*(.*)$/i;
 const DESCRIPTION_HEADING = /^###\s+(?:description|descripció|descripcio)\s*$/i;
-const CRITERIA_HEADING = /^###\s+(?:acceptance criteria|criteris d['’]acceptació|criteris d['’]acceptacio)\s*$/i;
 
 // Parses the import format: every "## " heading starts a task, in document
 // order. Lines inside fenced code blocks are never treated as structure.
 export function parseTasksMarkdown(markdown) {
   const tasks = [];
   let current = null;
-  let section = 'description';
   let inFence = false;
 
   for (const line of String(markdown).replace(/\r\n?/g, '\n').split('\n')) {
     if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
 
     if (!inFence && /^##\s+/.test(line)) {
-      current = { title: line.replace(/^##\s+/, '').trim(), moduleNames: null, description: [], criteria: [] };
+      current = { title: line.replace(/^##\s+/, '').trim(), moduleNames: null, description: [] };
       tasks.push(current);
-      section = 'description';
       continue;
     }
     if (!current) continue; // Preamble such as the "# Project Tasks" title.
@@ -37,16 +34,10 @@ export function parseTasksMarkdown(markdown) {
         current.moduleNames = (modules[1] ?? modules[2]).split(',').map((name) => name.trim()).filter(Boolean);
         continue;
       }
-      if (DESCRIPTION_HEADING.test(line.trim())) {
-        section = 'description';
-        continue;
-      }
-      if (CRITERIA_HEADING.test(line.trim())) {
-        section = 'criteria';
-        continue;
-      }
+      // The optional "### Description" heading is only a marker.
+      if (DESCRIPTION_HEADING.test(line.trim())) continue;
     }
-    current[section].push(line);
+    current.description.push(line);
   }
 
   const clean = (lines) =>
@@ -59,7 +50,6 @@ export function parseTasksMarkdown(markdown) {
     title: task.title,
     moduleNames: task.moduleNames || [],
     description: clean(task.description),
-    acceptanceCriteria: clean(task.criteria),
   }));
 }
 
@@ -88,9 +78,7 @@ function buildPreview(parsed, projectModules) {
       else if (!modules.includes(module)) modules.push(module);
     }
     if (task.description.length > 100000) errors.push(`${label}: la descripció és massa llarga.`);
-    if (task.acceptanceCriteria.length > 20000) errors.push(`${label}: els criteris d'acceptació són massa llargs.`);
     if (!task.description) warnings.push(`${label}: no té descripció.`);
-    if (!task.acceptanceCriteria) warnings.push(`${label}: no té criteris d'acceptació.`);
     if (seenTitles.has(task.title.toLowerCase())) warnings.push(`${label}: el títol està repetit.`);
     seenTitles.add(task.title.toLowerCase());
 
@@ -98,7 +86,6 @@ function buildPreview(parsed, projectModules) {
       order: position,
       title: task.title,
       description: task.description,
-      acceptance_criteria: task.acceptanceCriteria,
       module_names: task.moduleNames,
       modules,
     };
@@ -147,7 +134,7 @@ export async function importTasks(user, projectId, body) {
       await insertTask(t, {
         projectId,
         userId: user.id,
-        data: { title: task.title, description: task.description, acceptanceCriteria: task.acceptance_criteria },
+        data: { title: task.title, description: task.description },
         modules: task.modules,
         sortOrder: task.order,
       });
@@ -175,8 +162,6 @@ export async function template(user, projectId) {
 
 Creeu el repositori de GitHub del grup.
 
-### Acceptance Criteria
-
 - El repositori existeix.
 - Tots els membres del grup hi tenen accés.
 
@@ -191,8 +176,6 @@ Creeu el repositori de GitHub del grup.
 Creeu l'esquema relacional de la base de dades.
 
 ![Diagrama de la base de dades](https://example.com/diagram.png)
-
-### Acceptance Criteria
 
 - Diagrama entitat-relació complet.
 - Claus primàries i foranes definides.

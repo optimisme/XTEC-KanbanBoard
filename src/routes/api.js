@@ -1,33 +1,9 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 import { Router } from 'express';
-import multer from 'multer';
-import config from '../config/index.js';
 import * as admin from '../controllers/adminController.js';
 import * as auth from '../controllers/authController.js';
 import * as groupTasks from '../controllers/groupTaskController.js';
 import * as projects from '../controllers/projectController.js';
 import { requireActive, requireRole } from '../middleware/auth.js';
-import { allowedExtension } from '../services/groupTaskService.js';
-import { HttpError } from '../utils/errors.js';
-
-fs.mkdirSync(config.uploadDir, { recursive: true });
-
-// Evidence uploads: random file names, one file, size and extension limits.
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: config.uploadDir,
-    filename: (req, file, cb) => {
-      cb(null, crypto.randomBytes(24).toString('hex') + path.extname(file.originalname).toLowerCase());
-    },
-  }),
-  limits: { fileSize: config.maxUploadBytes, files: 1 },
-  fileFilter: (req, file, cb) => {
-    if (allowedExtension(file.originalname)) cb(null, true);
-    else cb(new HttpError(415, 'unsupported_file_type', 'Aquest tipus de fitxer no és permès.'));
-  },
-});
 
 const router = Router();
 const adminOnly = requireRole('admin');
@@ -91,13 +67,6 @@ router.post('/group-tasks/:groupTaskId/status', groupTasks.changeStatus);
 router.post('/group-tasks/:groupTaskId/responsible', groupTasks.transferResponsibility);
 router.post('/group-tasks/:groupTaskId/comments', groupTasks.addComment);
 router.get('/group-tasks/:groupTaskId/history', groupTasks.history);
-router.post(
-  '/group-tasks/:groupTaskId/attachments',
-  groupTasks.checkUploadAccess,
-  upload.single('file'),
-  groupTasks.addAttachment
-);
-router.get('/attachments/:attachmentId/download', groupTasks.downloadAttachment);
 
 // Supervision
 router.get('/projects/:projectId/matrix', projects.matrix);

@@ -24,7 +24,7 @@ integrity rules live in the database itself.
 Shared definitions and per-group state are separate tables:
 
 - `task_definitions` — one row per shared task of a project (title, Markdown
-  description, acceptance criteria, `sort_order`, `version`).
+  description, `sort_order`, `version`).
 - `group_tasks` — one row per (group, task definition): state, responsible
   student and completion data. A unique key on `(group_id, task_id)`
   guarantees exactly one instance.
@@ -52,8 +52,11 @@ created at the same time cannot miss each other.
 
 Task priority is the position in `task_definitions.sort_order`, read with
 `ORDER BY sort_order ASC, id ASC`. There is no priority column, enum, color or
-badge anywhere. Boards filter that single ordered list by state, so every
-column of every group shows tasks in the administrator's order.
+badge anywhere. Boards filter that single ordered list by state, so the
+columns of every group show tasks in the administrator's order. The one
+exception is the *Finalitzat* column, which is display-only history: it lists
+tasks in the order they were completed (`completed_at`, oldest first) and
+shows the completion date on each card.
 
 ### No teacher–module relation
 
@@ -101,7 +104,7 @@ Transactions retry automatically on InnoDB deadlocks.
 ## Responsibility versus contribution
 
 Who is responsible (`group_tasks.responsible_user_id`) and who did something
-(`task_history.actor_id`, `completed_by`, comment and attachment authors,
+(`task_history.actor_id`, `completed_by`, comment authors,
 `task_block_events.blocked_by`) are stored separately. The student
 contribution view presents them separately, so that being responsible is
 never read as proof of having done the work.
@@ -110,8 +113,7 @@ never read as proof of having done the work.
 
 ## Versioning
 
-Every change to a definition's title, description, acceptance criteria or
-modules stores a full snapshot in `task_versions` and increments
+Every change to a definition's title, description or modules stores a full snapshot in `task_versions` and increments
 `task_definitions.version`. Saving without changes creates no version. When a
 group completes a task, the current version number is stored with it.
 
@@ -131,18 +133,13 @@ group completes a task, the current version number is stored with it.
 - The development login is only registered when `DEV_AUTH_ENABLED=true`, and
   the configuration aborts startup if that is combined with production.
 
-## Markdown and uploads
+## Markdown
 
 - Markdown is rendered on the server with `marked` and sanitized with
   `sanitize-html` (tag and attribute allowlists; only `http`, `https` and
   `mailto` URLs). The browser receives ready-to-insert HTML.
 - A strict Content Security Policy (`script-src 'self'`, no inline scripts or
   styles) is a second line of defence.
-- Uploaded files are limited by extension, size and a content signature
-  check, stored under random names in `UPLOAD_DIR` (outside `public/`), and
-  served only through an authenticated endpoint with
-  `Content-Security-Policy: sandbox` and `nosniff`. Access is checked before
-  the file is written to disk.
 
 ## Frontend
 
@@ -155,5 +152,5 @@ server-sanitized Markdown is inserted as HTML.
 
 `proxmox/` holds the scripts for the institute's Proxmox container
 (kanban.ieti.site). The deploy script packages committed files only, never
-touches the server's `.env` or `uploads/`, dumps the database before running
+touches the server's `.env`, dumps the database before running
 migrations and rolls the code back if the health check fails.

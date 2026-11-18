@@ -14,19 +14,13 @@ export function presentTask(task, modules, { html = false } = {}) {
     project_id: task.project_id,
     title: task.title,
     description: task.description,
-    acceptance_criteria: task.acceptance_criteria,
     sort_order: task.sort_order,
     version: task.version,
     author: { id: task.author_id, name: task.author_name },
     modules,
     created_at: task.created_at,
     updated_at: task.updated_at,
-    ...(html
-      ? {
-          description_html: renderMarkdown(task.description),
-          acceptance_criteria_html: renderMarkdown(task.acceptance_criteria),
-        }
-      : {}),
+    ...(html ? { description_html: renderMarkdown(task.description) } : {}),
   };
 }
 
@@ -34,7 +28,6 @@ function parseTask(body) {
   return {
     title: v.text(body.title, 'títol', { max: 200 }),
     description: v.text(body.description, 'descripció', { max: 100000, required: false }),
-    acceptanceCriteria: v.text(body.acceptance_criteria, "criteris d'acceptació", { max: 20000, required: false }),
     // A task belongs to one or more modules of its project.
     moduleIds: v.idArray(body.module_ids, 'mòduls', { min: 1 }),
   };
@@ -124,7 +117,6 @@ export async function update(user, taskId, body) {
     const changed =
       task.title !== data.title ||
       task.description !== data.description ||
-      task.acceptance_criteria !== data.acceptanceCriteria ||
       !sameModules;
     if (!changed) return;
 
@@ -178,7 +170,6 @@ export async function versions(user, taskId) {
     ...row,
     modules: typeof row.modules === 'string' ? JSON.parse(row.modules) : row.modules,
     description_html: renderMarkdown(row.description),
-    acceptance_criteria_html: renderMarkdown(row.acceptance_criteria),
     current: row.version === task.version,
   }));
 }

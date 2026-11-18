@@ -3,8 +3,8 @@
 #
 #   ./proxmoxDeploy.sh [user] [rsa_path] [server_port]
 #
-# The server keeps its own .env and uploads/ directory: they are never part
-# of the package and never overwritten. Before the new code is started the
+# The server keeps its own .env: it is never part of the package and never
+# overwritten. Before the new code is started the
 # MySQL database is dumped, so a failed release can be rolled back.
 #
 # DEPLOY_DRY_RUN=1 builds and verifies the package without contacting the server.
@@ -55,20 +55,19 @@ rm -f "$ZIP_NAME"
 git archive --format=zip --output="$PROJECT_DIR/$ZIP_NAME" "$LOCAL_HEAD" -- . \
   ':(exclude)proxmox' \
   ':(exclude)tests' \
-  ':(exclude)uploads' \
   ':(exclude)backups' \
   ':(exclude).claude' \
   ':(exclude).gitignore'
 
 if unzip -Z1 "$ZIP_NAME" | grep -E \
-  '(^|/)\.env$|(^|/)\.env\.[^/]*$|(^|/)uploads(/|$)|(^|/)node_modules(/|$)|(^|/)\.git(/|$)' \
+  '(^|/)\.env$|(^|/)\.env\.[^/]*$|(^|/)node_modules(/|$)|(^|/)\.git(/|$)' \
   | grep -v -E '(^|/)\.env\.example$' >/dev/null; then
   echo "Error: el paquet conté configuració o dades de runtime; deploy cancel·lat."
   rm -f "$ZIP_NAME"
   exit 1
 fi
 
-echo "Desplegant main $LOCAL_HEAD (.env i uploads/ es conservaran al servidor)."
+echo "Desplegant main $LOCAL_HEAD (el .env del servidor es conservarà)."
 
 if [[ "${DEPLOY_DRY_RUN:-0}" == "1" ]]; then
   echo "✔️  Paquet verificat en mode dry-run; no s'ha contactat ni modificat el servidor."
@@ -111,13 +110,12 @@ REMOTE_USER="$(id -un)"
 APP_STOPPED=0
 RUNTIME_BACKUP_DIR=""
 
-# Update only release-owned entries. The server's .env and uploads/ are never
-# touched; obsolete files inside release directories are removed.
+# Update only release-owned entries. The server's .env is never touched; obsolete files inside release directories are removed.
 sync_release() {
   local source_dir="$1" entry name
   while IFS= read -r -d '' entry; do
     name="${entry##*/}"
-    case "$name" in uploads|.env) continue ;; esac
+    case "$name" in .env) continue ;; esac
     if [[ -d "$entry" && ! -L "$entry" ]]; then
       [[ ! -L "$APP_DIR/$name" ]] || return 1
       mkdir -p "$APP_DIR/$name"
@@ -131,7 +129,7 @@ sync_release() {
 cleanup_remote() {
   status=$?
   if [[ "$status" -ne 0 && "$APP_STOPPED" -eq 1 && -f "$BACKUP_DIR/package.json" ]]; then
-    echo "⚠️  El deploy ha fallat; restaurant el codi anterior sense tocar uploads/ ni .env."
+    echo "⚠️  El deploy ha fallat; restaurant el codi anterior sense tocar el .env."
     pm2 delete app >/dev/null 2>&1 || true
     sync_release "$BACKUP_DIR" || true
     cd "$APP_DIR"
@@ -207,7 +205,7 @@ fi
 
 # Keep a rollback copy of the current code. Runtime data stays in place.
 if [[ -f "$APP_DIR/package.json" ]]; then
-  rsync -a --delete --exclude 'uploads/' --exclude '.env' "$APP_DIR/" "$BACKUP_DIR/"
+  rsync -a --delete --exclude '.env' "$APP_DIR/" "$BACKUP_DIR/"
 fi
 
 if command -v pm2 >/dev/null 2>&1; then
@@ -241,7 +239,6 @@ sync_release "$PROJECT_DIR"
 
 cd "$APP_DIR"
 test -f package.json
-mkdir -p uploads
 
 # Apply pending database migrations with the server's own configuration.
 node src/db/migrate.js

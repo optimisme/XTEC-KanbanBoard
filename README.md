@@ -41,7 +41,6 @@ Architecture decisions are documented in [docs/architecture.md](docs/architectur
 | Sessions | `express-session` stored in MySQL (`express-mysql-session`) |
 | Frontend | HTML, CSS and vanilla JavaScript modules (no framework, no build step) |
 | Markdown | `marked` + `sanitize-html` (rendered and sanitized on the server) |
-| Uploads | `multer`, stored outside the public directory |
 | Tests | Node.js test runner (`node --test`) + `supertest` |
 
 ## Requirements
@@ -112,7 +111,6 @@ configuration at startup and refuses to start when something is missing.
 | `INITIAL_ADMIN_EMAIL` | Account that becomes administrator on its first login |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Optional administrator with password login |
 | `SESSION_SECRET` | At least 32 random characters |
-| `UPLOAD_DIR`, `MAX_UPLOAD_SIZE_MB` | Evidence storage and size limit |
 | `DEV_AUTH_ENABLED` | Development-only login (see below) |
 
 Generate a session secret with:
@@ -167,9 +165,11 @@ are rejected). The account's user principal name is used as its email.
 ### Development login
 
 When no identity provider is available, set `DEV_AUTH_ENABLED=true` in a
-non-production `.env`. The login screen then offers a form that signs in with
-any email of the allowed domains, following exactly the same registration and
-approval rules. **The server refuses to start with `DEV_AUTH_ENABLED=true` and
+non-production `.env`. The login form then signs in any email of the allowed
+domains without a password, following exactly the same registration and
+approval rules. It is the same single form used by the administrator account:
+an email is treated as a development account, anything else as the
+administrator's username. **The server refuses to start with `DEV_AUTH_ENABLED=true` and
 `NODE_ENV=production`**, and the route does not exist in production.
 
 ## Initial administrator
@@ -189,9 +189,9 @@ two ways to get the first one:
   to the institutional identity the first time it logs in.
 
 - **Username and password** (optional): set `ADMIN_USERNAME` and
-  `ADMIN_PASSWORD` in `.env`. The login screen then shows an *Accés
-  d'administració* form that signs in as a built-in administrator without the
-  identity provider. Leave both variables empty to disable it.
+  `ADMIN_PASSWORD` in `.env`. The login form then accepts that username and
+  password and signs in as a built-in administrator, without the identity
+  provider. Leave both variables empty to disable it.
   - The account is always an active administrator; it cannot be locked out
     from the user screen.
   - In production the server refuses to start unless the password has at
@@ -231,8 +231,6 @@ ALLOWED_EMAIL_DOMAIN=xtec.cat,iesesteveterradas.cat
 SESSION_SECRET=test-session-secret-test-session-secret-0000
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=test-admin-password
-UPLOAD_DIR=./uploads/test
-MAX_UPLOAD_SIZE_MB=1
 DEV_AUTH_ENABLED=true
 ```
 
@@ -247,7 +245,7 @@ The suite applies the migrations, empties the test database and covers the
 business rules: approval flow, project and group access, shared task
 propagation, global ordering, automatic assignment, transfers, blocking,
 completion and reopening, Markdown import, versioning, duplication, archived
-projects, uploads and concurrent updates.
+projects and concurrent updates.
 
 ## Production deployment
 
@@ -257,7 +255,7 @@ General requirements:
 2. Serve the application behind an HTTPS reverse proxy. Session cookies are
    `Secure` in production and the app trusts one proxy hop (`X-Forwarded-*`).
 3. `npm ci --omit=dev`, `npm run migrate`, then `npm start` under a process manager.
-4. Back up the MySQL database and the `UPLOAD_DIR` directory together.
+4. Back up the MySQL database regularly.
 
 ### kanban.ieti.site (Proxmox)
 
@@ -280,8 +278,7 @@ Proxmox container.
    cd proxmox && ./proxmoxDeploy.sh
    ```
 
-   The script packages only committed files, keeps the server's `.env` and
-   `uploads/`, dumps the database before migrating, runs the migrations,
+   The script packages only committed files, keeps the server's `.env`, dumps the database before migrating, runs the migrations,
    restarts the app with pm2, checks `/health` and rolls the code back if the
    new version does not start. `DEPLOY_DRY_RUN=1 ./proxmoxDeploy.sh` only
    builds and verifies the package.
@@ -290,7 +287,7 @@ Proxmox container.
 |---|---|
 | `proxmoxInstall.sh` | One-time server preparation |
 | `proxmoxDeploy.sh` | Deploy `main` with backup, migrations and health check |
-| `proxmoxBackup.sh` | Download a database dump, `uploads/` and `.env` into `backups/` |
+| `proxmoxBackup.sh` | Download a database dump and the server `.env` into `backups/` |
 | `proxmoxConnect.sh` | Open an SSH session |
 | `proxmoxSendFile.sh` | Copy one file to the server |
 | `proxmoxSetupRedirect80.sh` / `proxmoxSetupRedirectUndo.sh` | Redirect port 80 to the app port |
@@ -306,7 +303,7 @@ Proxmox container.
 | View every group, matrix, blocked tasks, student activity | ✔ | ✔ | |
 | Change any task state, reassign responsibility | ✔ | ✔ | |
 | Move tasks along the board, block and unblock, complete | ✔ | ✔ | ✔ |
-| Comment and add evidence | ✔ | ✔ | ✔ |
+| Comment on tasks | ✔ | ✔ | ✔ |
 | Transfer one's own tasks to a group member | | | ✔ |
 | Configure the group's GitHub repository URL | ✔ | | ✔ |
 
@@ -333,6 +330,8 @@ Teachers and administrators can also correct a task to any other state.
 
 - **Priority is the position in the project's task list.** There are no
   priority levels. Only administrators reorder; all boards follow that order.
+  The *Finalitzat* column is the exception: it shows tasks in the order they
+  were completed, with the completion date on each card.
 - **Automatic assignment**: when a student moves an unassigned task to
   *En curs* they become its responsible student, atomically with the state
   change. Teachers and administrators never become responsible this way.
@@ -363,16 +362,14 @@ shows the format:
 
 Create the group's GitHub repository.
 
-### Acceptance Criteria
-
 - The repository exists.
 ```
 
 - Each `##` heading is a task; document order becomes the global order.
 - `**Modules:**` lists one or more modules already associated with the project.
-- `### Description` and `### Acceptance Criteria` hold free Markdown
-  (the Catalan headings `**Mòduls:**`, `### Descripció` and
-  `### Criteris d'acceptació` are accepted too).
+- Everything else under the task is its Markdown description. The
+  `### Description` heading is optional (the Catalan `**Mòduls:**` and
+  `### Descripció` are accepted too).
 - A preview shows the tasks, their order, modules, errors and warnings.
 - The import is atomic: with any error, nothing is created.
 
@@ -382,7 +379,7 @@ From a project's *Configuració* tab an administrator can duplicate it for
 another academic year. The copy receives the name and description (editable),
 the module associations, the shared tasks, their modules and their order. It
 does **not** receive teachers, groups, students, repository URLs, task states,
-responsible students, comments, evidence, blocking events or history.
+responsible students, comments, blocking events or history.
 
 ## REST API overview
 
@@ -399,7 +396,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
 | Shared tasks | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |
 | Import | `GET /api/projects/:id/import/template`, `POST …/import/preview`, `POST …/import` |
-| Group tasks | `GET /api/group-tasks/:id`, `POST …/status`, `POST …/responsible`, `POST …/comments`, `POST …/attachments`, `GET …/history`, `GET /api/attachments/:id/download` |
+| Group tasks | `GET /api/group-tasks/:id`, `POST …/status`, `POST …/responsible`, `POST …/comments`, `GET …/history` |
 | Supervision | `GET /api/projects/:id/matrix`, `GET /api/blocked-tasks`, `GET /api/projects/:id/students/:userId/contributions` |
 
 ## Repository structure

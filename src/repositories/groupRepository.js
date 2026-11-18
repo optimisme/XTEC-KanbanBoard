@@ -111,9 +111,8 @@ export async function hasActivity(db, groupId) {
     `SELECT EXISTS (SELECT 1 FROM group_tasks WHERE group_id = ? AND (status <> 'pending' OR responsible_user_id IS NOT NULL))
          OR EXISTS (SELECT 1 FROM task_history h JOIN group_tasks gt ON gt.id = h.group_task_id WHERE gt.group_id = ?)
          OR EXISTS (SELECT 1 FROM task_comments c JOIN group_tasks gt ON gt.id = c.group_task_id WHERE gt.group_id = ?)
-         OR EXISTS (SELECT 1 FROM task_attachments a JOIN group_tasks gt ON gt.id = a.group_task_id WHERE gt.group_id = ?)
          AS active`,
-    [groupId, groupId, groupId, groupId]
+    [groupId, groupId, groupId]
   );
   return Boolean(rows[0].active);
 }

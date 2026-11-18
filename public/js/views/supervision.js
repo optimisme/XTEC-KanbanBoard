@@ -67,7 +67,6 @@ export async function renderContributions(view, [projectId, studentId]) {
     api.get(`/api/projects/${projectId}`),
     api.get(`/api/projects/${projectId}/students/${studentId}/contributions`),
   ]);
-  const kinds = { link: 'Enllaç', github_commit: 'Commit', github_pull_request: 'Pull request', file: 'Fitxer' };
 
   append(view, 
     h('div', { class: 'page-header' },
@@ -82,7 +81,7 @@ export async function renderContributions(view, [projectId, studentId]) {
             ? h('a', { href: `#/groups/${data.group.id}` }, `Grup ${data.group.group_number}`)
             : h('span', {}, 'Actualment sense grup en aquest projecte')))),
     h('div', { class: 'notice' },
-      'Ser responsable d\'una tasca no demostra haver-ne fet tota la feina. Aquesta vista separa la responsabilitat de les accions realment registrades (finalitzacions, comentaris, evidències i bloquejos).'),
+      'Ser responsable d\'una tasca no demostra haver-ne fet tota la feina. Aquesta vista separa la responsabilitat de les accions realment registrades (finalitzacions, comentaris i bloquejos).'),
 
     section('Tasques de les quals és responsable', data.assigned.map((t) =>
       h('li', {},
@@ -114,17 +113,6 @@ export async function renderContributions(view, [projectId, studentId]) {
         h('div', { class: 'head' }, taskLink(c), h('span', { class: 'when' }, formatDateTime(c.created_at))),
         h('div', { class: 'text' }, c.content))),
       'No ha escrit cap comentari.'),
-
-    section('Evidències aportades', data.attachments.map((a) =>
-      h('li', {},
-        h('div', { class: 'head' },
-          a.kind === 'file'
-            ? h('a', { href: `/api/attachments/${a.id}/download`, target: '_blank', rel: 'noopener noreferrer' }, a.title)
-            : h('a', { href: a.url, target: '_blank', rel: 'noopener noreferrer' }, a.title),
-          h('span', { class: 'tag' }, kinds[a.kind]),
-          h('span', { class: 'when' }, formatDateTime(a.created_at))),
-        h('div', { class: 'muted' }, 'Tasca: ', taskLink(a)))),
-      'No ha aportat cap evidència.'),
 
     section('Canvis de responsabilitat', data.transfers.map((e) => historyItem(e, { withTask: true })),
       'No hi ha canvis de responsabilitat.'),

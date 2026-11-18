@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { createScenario, db, groupTaskOf, login, setup, teardown } from './helpers.js';
 
@@ -24,10 +22,7 @@ before(async () => {
   gtB = (await groupTaskOf(student1, s.group0.id, s.tasks[1].id)).id;
   gtC = (await groupTaskOf(student1, s.group0.id, s.tasks[2].id)).id;
 });
-after(async () => {
-  fs.rmSync(path.resolve('uploads/test'), { recursive: true, force: true });
-  await teardown();
-});
+after(teardown);
 
 const setStatus = (client, id, status, extra = {}) => client.post(`/api/group-tasks/${id}/status`, { status, ...extra });
 
@@ -210,59 +205,27 @@ test('27. concurrent task updates cannot produce inconsistent assignments', asyn
   assert.equal(end.history.filter((h) => h.event_type === 'responsibility_transferred').length, 1);
 });
 
-test('comments and evidence: links, uploads, validation and protected downloads', async () => {
+test('comments: students and teachers can comment; history records it', async () => {
   const comment = await student1.post(`/api/group-tasks/${gtA}/comments`, { content: 'First comment' });
   assert.equal(comment.status, 201);
   assert.equal((await student1.post(`/api/group-tasks/${gtA}/comments`, { content: '  ' })).status, 400);
   assert.equal((await teacher.post(`/api/group-tasks/${gtA}/comments`, { content: 'Teacher feedback' })).status, 201);
-
-  const link = await student1.post(`/api/group-tasks/${gtA}/attachments`, {
-    url: 'https://github.com/org/repo/pull/12',
-    title: 'Pull request',
-  });
-  assert.equal(link.status, 201);
-  assert.equal(link.body.attachments.at(-1).kind, 'github_pull_request');
-  const commit = await student1.post(`/api/group-tasks/${gtA}/attachments`, {
-    url: 'https://github.com/org/repo/commit/abcdef1234567',
-  });
-  assert.equal(commit.body.attachments.at(-1).kind, 'github_commit');
-  assert.equal((await student1.post(`/api/group-tasks/${gtA}/attachments`, { url: 'javascript:alert(1)' })).status, 400);
-
-  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
-  const upload = (client, name, content) =>
-    client.agent.post(`/api/group-tasks/${gtA}/attachments`).set('X-CSRF-Token', client.token).attach('file', content, name);
-
-  const ok = await upload(student2, 'screenshot.png', png);
-  assert.equal(ok.status, 201);
-  const file = ok.body.attachments.at(-1);
-  assert.equal(file.kind, 'file');
-  assert.equal(file.author.id, s.users.s2.id);
-  assert.equal(file.is_image, true);
-
-  // Disallowed type, disguised content, oversized file, and outsiders.
-  assert.equal((await upload(student1, 'script.html', Buffer.from('<script>alert(1)</script>'))).status, 415);
-  assert.equal((await upload(student1, 'fake.png', Buffer.from('<script>alert(1)</script>'))).status, 415);
-  assert.equal((await upload(student1, 'big.txt', Buffer.alloc(1024 * 1024 + 10, 'a'))).status, 413);
-  assert.equal((await upload(student3, 'screenshot.png', png)).status, 403);
-
-  // Downloads require access to the group task.
-  const download = await student1.get(file.download_url);
-  assert.equal(download.status, 200);
-  assert.equal(download.headers['content-type'], 'image/png');
-  assert.match(download.headers['content-security-policy'], /sandbox/);
-  assert.equal((await teacher.get(file.download_url)).status, 200);
-  assert.equal((await student3.get(file.download_url)).status, 403);
-
-  // Only the accepted file is on disk, outside the public directory.
-  const stored = fs.readdirSync(path.resolve('uploads/test'));
-  assert.equal(stored.length, 1);
-  assert.ok(!fs.existsSync(path.resolve('public', stored[0])));
+  assert.equal((await student3.post(`/api/group-tasks/${gtA}/comments`, { content: 'Outsider' })).status, 403);
 
   const detail = (await student1.get(`/api/group-tasks/${gtA}`)).body;
   assert.equal(detail.comment_count, 2);
-  assert.equal(detail.attachment_count, 3);
-  assert.ok(detail.history.some((h) => h.event_type === 'comment_added'));
-  assert.ok(detail.history.some((h) => h.event_type === 'evidence_uploaded'));
+  assert.deepEqual(detail.comments.filter((c) => c.type === 'comment').map((c) => c.author_name), ['Student 1', 'Teacher A']);
+  assert.equal(detail.history.filter((h) => h.event_type === 'comment_added').length, 2);
+
+  // The evidence feature and the acceptance criteria field no longer exist.
+  assert.equal('attachments' in detail, false);
+  assert.equal('acceptance_criteria' in detail.definition, false);
+  assert.equal((await student1.post(`/api/group-tasks/${gtA}/attachments`, { url: 'https://example.com' })).status, 404);
+  const leftovers = await db.query(
+    `SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND (TABLE_NAME = 'task_attachments' OR COLUMN_NAME = 'acceptance_criteria')`
+  );
+  assert.equal(leftovers.length, 0);
 });
 
 test('supervision: progress matrix and student contributions', async () => {
@@ -281,9 +244,8 @@ test('supervision: progress matrix and student contributions', async () => {
   const contrib = (await teacher.get(`/api/projects/${s.project.id}/students/${s.users.s2.id}/contributions`)).body;
   assert.equal(contrib.student.name, 'Student 2');
   assert.equal(contrib.group.group_number, 0);
-  // Student 2 blocked Task A and uploaded a file without being responsible for it.
+  // Student 2 blocked Task A without being responsible for it.
   assert.ok(contrib.block_events.some((e) => e.reason === 'Waiting for the database server'));
-  assert.equal(contrib.attachments.length, 1);
   assert.ok(contrib.activity.some((e) => e.event_type === 'completed'));
   assert.ok(contrib.transfers.length >= 1);
   assert.ok(!contrib.assigned.some((t) => t.group_task_id === gtA));

@@ -120,8 +120,6 @@ const config = {
     .filter(Boolean),
   initialAdminEmail: optional('INITIAL_ADMIN_EMAIL').toLowerCase(),
   sessionSecret,
-  uploadDir: path.resolve(process.cwd(), optional('UPLOAD_DIR', './uploads')),
-  maxUploadBytes: integer('MAX_UPLOAD_SIZE_MB', 10) * 1024 * 1024,
   devAuthEnabled: devAuthEnabled && !isProduction,
 };
 

@@ -1,4 +1,3 @@
-import multer from 'multer';
 import config from '../config/index.js';
 import { HttpError } from '../utils/errors.js';
 
@@ -16,15 +15,6 @@ export function errorHandler(err, req, res, next) {
   if (err instanceof HttpError) {
     status = err.status;
     body = { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) };
-  } else if (err instanceof multer.MulterError) {
-    status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
-    body = {
-      code: 'upload_error',
-      message:
-        err.code === 'LIMIT_FILE_SIZE'
-          ? `El fitxer supera la mida màxima (${Math.round(config.maxUploadBytes / 1024 / 1024)} MB).`
-          : "No s'ha pogut processar el fitxer.",
-    };
   } else if (err.type === 'entity.parse.failed' || err.type === 'entity.too.large') {
     status = err.status || 400;
     body = { code: 'validation_error', message: 'La petició no és vàlida.' };

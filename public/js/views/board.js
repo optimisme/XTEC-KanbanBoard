@@ -2,7 +2,7 @@
 // "move to" control on every card. Cards always follow the global task order.
 import { api } from '../api.js';
 import {
-  append, avatar, clear, h, icon, moduleChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
+  append, avatar, clear, formatDateTime, h, icon, moduleChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
 } from '../ui.js';
 import { changeTaskStatus, openTaskModal } from './taskModal.js';
 
@@ -59,10 +59,13 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
             ? [avatar(task.responsible.name), h('span', { title: `Responsable: ${task.responsible.name}` }, task.responsible.name)]
             : h('span', {}, 'Sense responsable')),
         h('div', { class: 'counts' },
-          h('span', { title: 'Comentaris' }, icon('comment'), String(task.comment_count), h('span', { class: 'sr-only' }, ' comentaris')),
-          h('span', { title: 'Evidències' }, icon('clip'), String(task.attachment_count), h('span', { class: 'sr-only' }, ' evidències')))),
-      task.status === 'completed' && task.completed_by && (!task.responsible || task.completed_by.id !== task.responsible.id)
-        ? h('div', { class: 'muted', style: { 'font-size': '0.8rem', 'margin-top': '6px' } }, `Finalitzada per ${task.completed_by.name}`)
+          h('span', { title: 'Comentaris' }, icon('comment'), String(task.comment_count), h('span', { class: 'sr-only' }, ' comentaris')))),
+      task.status === 'completed' && task.completed_at
+        ? h('div', { class: 'muted', style: { 'font-size': '0.8rem', 'margin-top': '6px' } },
+            `Finalitzada el ${formatDateTime(task.completed_at)}`,
+            task.completed_by && (!task.responsible || task.completed_by.id !== task.responsible.id)
+              ? ` per ${task.completed_by.name}`
+              : '')
         : null,
       moveSelect ? h('div', { class: 'task-move' }, moveSelect) : null);
 
@@ -84,6 +87,11 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
 
   function column(status) {
     const tasks = board.tasks.filter((t) => t.status === status);
+    // "Finalitzat" lists tasks in the order they were completed (first one
+    // on top). Every other column keeps the global project order.
+    if (status === 'completed') {
+      tasks.sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at) || a.sort_order - b.sort_order);
+    }
     const el = h('section', { class: `column ${status}`, 'aria-label': STATUS_LABELS[status] },
       h('div', { class: 'column-header' },
         h('h2', {}, icon(status), STATUS_LABELS[status]),

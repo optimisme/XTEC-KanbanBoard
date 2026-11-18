@@ -52,8 +52,7 @@ const DETAIL_SELECT = `
   SELECT ${COLUMNS}, td.title, td.sort_order, td.version AS definition_version, td.deleted_at,
          ru.name AS responsible_name, cu.name AS completed_by_name,
          be.reason AS block_reason, be.blocked_at,
-         (SELECT COUNT(*) FROM task_comments c WHERE c.group_task_id = gt.id AND c.type = 'comment') AS comment_count,
-         (SELECT COUNT(*) FROM task_attachments a WHERE a.group_task_id = gt.id) AS attachment_count
+         (SELECT COUNT(*) FROM task_comments c WHERE c.group_task_id = gt.id AND c.type = 'comment') AS comment_count
     FROM group_tasks gt
     JOIN task_definitions td ON td.id = gt.task_id
     LEFT JOIN users ru ON ru.id = gt.responsible_user_id
@@ -98,36 +97,6 @@ export function comments(db, groupTaskId) {
       WHERE c.group_task_id = ? ORDER BY c.created_at ASC, c.id ASC`,
     [groupTaskId]
   );
-}
-
-// ---- Attachments ----------------------------------------------------------
-
-export async function addAttachment(db, a) {
-  const result = await db.query(
-    `INSERT INTO task_attachments (group_task_id, author_id, kind, title, url, stored_name, mime_type, size_bytes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [a.groupTaskId, a.authorId, a.kind, a.title, a.url || null, a.storedName || null, a.mimeType || null, a.sizeBytes ?? null]
-  );
-  return result.insertId;
-}
-
-const ATTACHMENT_COLUMNS = `a.id, a.group_task_id, a.author_id, u.name AS author_name, a.kind, a.title, a.url,
-  a.stored_name, a.mime_type, a.size_bytes, a.created_at`;
-
-export function attachments(db, groupTaskId) {
-  return db.query(
-    `SELECT ${ATTACHMENT_COLUMNS} FROM task_attachments a JOIN users u ON u.id = a.author_id
-      WHERE a.group_task_id = ? ORDER BY a.created_at ASC, a.id ASC`,
-    [groupTaskId]
-  );
-}
-
-export async function findAttachment(db, id) {
-  const rows = await db.query(
-    `SELECT ${ATTACHMENT_COLUMNS} FROM task_attachments a JOIN users u ON u.id = a.author_id WHERE a.id = ?`,
-    [id]
-  );
-  return rows[0] || null;
 }
 
 // ---- Blocking events ------------------------------------------------------

@@ -159,7 +159,6 @@ export async function duplicate(user, projectId, body) {
         projectId: id,
         title: task.title,
         description: task.description,
-        acceptanceCriteria: task.acceptance_criteria,
         sortOrder: sortOrder++,
         authorId: user.id,
       };

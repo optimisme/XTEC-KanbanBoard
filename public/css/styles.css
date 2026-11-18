@@ -153,7 +153,7 @@ small, .muted { color: var(--text-muted); }
 .btn svg, .icon { width: 16px; height: 16px; flex: none; }
 
 label { display: block; font-size: 0.88rem; font-weight: 500; margin-bottom: 4px; }
-input[type='text'], input[type='url'], input[type='email'], input[type='search'], select, textarea {
+input[type='text'], input[type='url'], input[type='email'], input[type='search'], input[type='password'], select, textarea {
   width: 100%; padding: 8px 10px;
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--text); font: inherit;
@@ -381,13 +381,25 @@ td.actions .btn + .btn { margin-left: 6px; }
 /* ---- Task detail ------------------------------------------------------- */
 
 .detail-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
-.detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 24px; }
+/* The dialog never grows beyond the window: the active tab scrolls instead. */
+.modal.fit { max-height: calc(100vh - 10vh); }
+.modal.fit .modal-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.task-detail { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.detail-layout { display: flex; gap: 24px; flex: 1 1 auto; min-height: 0; }
+.detail-main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.detail-side { flex: 0 0 250px; overflow-y: auto; }
+.tab-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.tab-scroll { flex: 1 1 auto; min-height: 120px; overflow-y: auto; padding-right: 8px; }
+.comment-form { display: flex; gap: 8px; align-items: flex-end; padding-top: 12px; border-top: 1px solid var(--border); }
+.comment-form textarea { min-height: 56px; }
+.state-change { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); }
+.history-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; }
 .detail-side section { margin-bottom: 18px; }
 .detail-side h3, .section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
 .detail-side .stack { display: grid; gap: 6px; }
 .detail-side .btn { width: 100%; justify-content: flex-start; }
 .person { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.subtabs { display: flex; gap: 4px; margin: 20px 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.subtabs { display: flex; flex: none; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
 .subtabs button {
   padding: 7px 12px; border: 0; background: none; font: inherit; font-size: 0.9rem; color: var(--text-muted);
   border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; white-space: nowrap;
@@ -403,10 +415,6 @@ td.actions .btn + .btn { margin-left: 6px; }
 .timeline .text { margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .timeline li.event-block .text { color: #8a3d06; background: var(--blocked-bg); border-radius: 4px; padding: 6px 8px; }
 .timeline li.event-unblock .head { color: var(--completed); }
-.evidence { display: flex; align-items: center; gap: 10px; }
-.evidence img { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
-.evidence .info { min-width: 0; flex: 1; }
-.evidence .info a { overflow-wrap: anywhere; }
 
 /* Rendered Markdown (sanitized on the server). */
 .markdown { overflow-wrap: anywhere; }
@@ -448,7 +456,10 @@ td.actions .btn + .btn { margin-left: 6px; }
   .userbox { margin-left: auto; }
   .board { grid-template-columns: repeat(4, minmax(240px, 82vw)); scroll-snap-type: x proximity; }
   .column { scroll-snap-align: start; }
-  .detail-grid { grid-template-columns: 1fr; }
+  .detail-layout { flex-direction: column; }
+  .detail-side { flex: none; overflow: visible; }
+  .modal.fit { max-height: none; }
+  .tab-scroll { overflow: visible; }
   .overlay { padding: 0; }
   .modal, .modal.wide { max-width: none; min-height: 100vh; border-radius: 0; }
   .task-row { flex-wrap: wrap; }

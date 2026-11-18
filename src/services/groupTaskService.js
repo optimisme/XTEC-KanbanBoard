@@ -1,12 +1,9 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import config from '../config/index.js';
 import { db } from '../db/pool.js';
 import * as groupRepo from '../repositories/groupRepository.js';
 import * as groupTaskRepo from '../repositories/groupTaskRepository.js';
 import * as moduleRepo from '../repositories/moduleRepository.js';
 import * as taskRepo from '../repositories/taskRepository.js';
-import { badRequest, conflict, forbidden, HttpError, notFound } from '../utils/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../utils/errors.js';
 import { renderMarkdown } from '../utils/markdown.js';
 import * as v from '../validators/index.js';
 import { assertWritable, groupAccess, groupTaskAccess, groupTaskAccessById } from './accessService.js';
@@ -55,7 +52,6 @@ function presentCard(row, modules, access, user) {
     block_reason: row.block_reason,
     blocked_at: row.blocked_at,
     comment_count: row.comment_count,
-    attachment_count: row.attachment_count,
     allowed_transitions: allowedTransitions(access, row.status),
     can_transfer:
       access.project.status !== 'archived' &&
@@ -82,12 +78,11 @@ export async function detail(user, groupTaskId) {
   const row = await groupTaskRepo.findDetailed(db, groupTaskId);
   if (row.deleted_at) throw notFound("No s'ha trobat la tasca.");
 
-  const [definition, modules, members, comments, attachments, blockEvents, history] = await Promise.all([
+  const [definition, modules, members, comments, blockEvents, history] = await Promise.all([
     taskRepo.findById(db, row.task_id),
     moduleRepo.mapForTasks(db, [row.task_id]),
     groupRepo.members(db, row.group_id),
     groupTaskRepo.comments(db, groupTaskId),
-    groupTaskRepo.attachments(db, groupTaskId),
     groupTaskRepo.blockEvents(db, groupTaskId),
     groupTaskRepo.history(db, groupTaskId),
   ]);
@@ -104,13 +99,10 @@ export async function detail(user, groupTaskId) {
       id: definition.id,
       version: definition.version,
       description: definition.description,
-      acceptance_criteria: definition.acceptance_criteria,
       description_html: renderMarkdown(definition.description),
-      acceptance_criteria_html: renderMarkdown(definition.acceptance_criteria),
       updated_at: definition.updated_at,
     },
     comments,
-    attachments: attachments.map(presentAttachment),
     block_events: blockEvents,
     history,
   };
@@ -230,124 +222,6 @@ export async function addComment(user, groupTaskId, body) {
     await groupTaskRepo.addHistory(t, { groupTaskId, actorId: user.id, eventType: 'comment_added', newValue: commentId });
   });
   return detail(user, groupTaskId);
-}
-
-// ---- Evidence ---------------------------------------------------------------
-
-// Allowed upload types. Files are stored under a random name outside the
-// public directory and are only served through the authenticated download.
-const FILE_TYPES = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.pdf': 'application/pdf',
-  '.txt': 'text/plain; charset=utf-8',
-  '.md': 'text/plain; charset=utf-8',
-  '.csv': 'text/plain; charset=utf-8',
-  '.zip': 'application/zip',
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  '.odt': 'application/vnd.oasis.opendocument.text',
-  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
-  '.odp': 'application/vnd.oasis.opendocument.presentation',
-};
-const INLINE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
-const ZIP_BASED = ['.zip', '.docx', '.xlsx', '.pptx', '.odt', '.ods', '.odp'];
-
-export function allowedExtension(filename) {
-  const extension = path.extname(filename || '').toLowerCase();
-  return FILE_TYPES[extension] ? extension : null;
-}
-
-// Checks that the file content really matches its extension.
-function matchesSignature(extension, head) {
-  const startsWith = (...bytes) => bytes.every((b, i) => head[i] === b);
-  if (extension === '.png') return startsWith(0x89, 0x50, 0x4e, 0x47);
-  if (extension === '.jpg' || extension === '.jpeg') return startsWith(0xff, 0xd8, 0xff);
-  if (extension === '.gif') return startsWith(0x47, 0x49, 0x46, 0x38);
-  if (extension === '.webp') return startsWith(0x52, 0x49, 0x46, 0x46) && head.subarray(8, 12).toString() === 'WEBP';
-  if (extension === '.pdf') return startsWith(0x25, 0x50, 0x44, 0x46);
-  if (ZIP_BASED.includes(extension)) return startsWith(0x50, 0x4b);
-  return !head.includes(0); // Text formats must not contain NUL bytes.
-}
-
-function presentAttachment(a) {
-  return {
-    id: a.id,
-    kind: a.kind,
-    title: a.title,
-    url: a.kind === 'file' ? null : a.url,
-    download_url: a.kind === 'file' ? `/api/attachments/${a.id}/download` : null,
-    is_image: a.kind === 'file' && INLINE_TYPES.has(a.mime_type),
-    size_bytes: a.size_bytes,
-    author: { id: a.author_id, name: a.author_name },
-    created_at: a.created_at,
-  };
-}
-
-// Used before accepting an upload, so files from unauthorized users are
-// never written to disk.
-export async function assertCanContribute(user, groupTaskId) {
-  const access = await groupTaskAccessById(db, user, groupTaskId);
-  assertWritable(access.project);
-}
-
-async function saveAttachment(user, groupTaskId, attachment) {
-  await db.tx(async (t) => {
-    await lockForWrite(t, user, groupTaskId);
-    const id = await groupTaskRepo.addAttachment(t, { groupTaskId, authorId: user.id, ...attachment });
-    await groupTaskRepo.addHistory(t, { groupTaskId, actorId: user.id, eventType: 'evidence_uploaded', newValue: id });
-  });
-  return detail(user, groupTaskId);
-}
-
-export async function addLink(user, groupTaskId, body) {
-  const url = v.httpUrl(body.url);
-  const title = v.text(body.title, 'títol', { max: 255, required: false }) || url.slice(0, 255);
-  let kind = 'link';
-  if (/^https:\/\/github\.com\/[^/]+\/[^/]+\/commit\/[0-9a-f]{7,40}/i.test(url)) kind = 'github_commit';
-  else if (/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/i.test(url)) kind = 'github_pull_request';
-  return saveAttachment(user, groupTaskId, { kind, title, url });
-}
-
-export async function addFile(user, groupTaskId, file) {
-  if (!file) throw badRequest('Cal adjuntar un fitxer.');
-  const discard = () => fs.unlink(file.path).catch(() => {});
-  try {
-    const extension = allowedExtension(file.originalname);
-    const handle = await fs.open(file.path, 'r');
-    const { buffer, bytesRead } = await handle.read(Buffer.alloc(4096), 0, 4096, 0);
-    await handle.close();
-    if (!extension || !matchesSignature(extension, buffer.subarray(0, bytesRead))) {
-      throw new HttpError(415, 'unsupported_file_type', 'Aquest tipus de fitxer no és permès.');
-    }
-    return await saveAttachment(user, groupTaskId, {
-      kind: 'file',
-      title: path.basename(file.originalname).slice(0, 255),
-      storedName: file.filename,
-      mimeType: FILE_TYPES[extension],
-      sizeBytes: file.size,
-    });
-  } catch (err) {
-    await discard();
-    throw err;
-  }
-}
-
-// Returns what is needed to stream a stored file to an authorized user.
-export async function download(user, attachmentId) {
-  const attachment = await groupTaskRepo.findAttachment(db, attachmentId);
-  if (!attachment || attachment.kind !== 'file') throw notFound("No s'ha trobat el fitxer.");
-  await groupTaskAccessById(db, user, attachment.group_task_id);
-  return {
-    path: path.join(config.uploadDir, path.basename(attachment.stored_name)),
-    filename: attachment.title,
-    mimeType: attachment.mime_type,
-    inline: INLINE_TYPES.has(attachment.mime_type),
-  };
 }
 
 export async function history(user, groupTaskId) {

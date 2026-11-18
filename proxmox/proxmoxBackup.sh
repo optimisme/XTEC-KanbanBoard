@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copies the production runtime state (a MySQL dump, uploads/ and .env) into
+# Copies the production runtime state (a MySQL dump and .env) into
 # backups/<UTC timestamp>/, which Git ignores. Read-only on the server: the
 # app keeps running and the dump uses a single consistent transaction.
 #
@@ -38,17 +38,14 @@ MYSQL_PWD="$DB_PASSWORD" mysqldump --single-transaction --no-tablespaces --routi
   | gzip > "$STAGE/database.sql.gz"
 gzip -t "$STAGE/database.sql.gz"
 
-mkdir -p "$STAGE/uploads"
-if [[ -d uploads ]]; then rsync -a uploads/ "$STAGE/uploads/"; fi
 cp -p .env "$STAGE/.env"
 
 cd "$STAGE"
-printf 'created_utc=%s\nhost=%s\napp_dir=%s\ndatabase=%s\nuploads=%s\n' \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(hostname)" "$APP_DIR" "$DB_NAME" \
-  "$(find uploads -type f | wc -l | tr -d ' ')" > BACKUP_INFO.txt
+printf 'created_utc=%s\nhost=%s\napp_dir=%s\ndatabase=%s\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(hostname)" "$APP_DIR" "$DB_NAME" > BACKUP_INFO.txt
 if command -v sha256sum >/dev/null 2>&1; then SUM="sha256sum"; else SUM="shasum -a 256"; fi
 find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 $SUM > SHA256SUMS
-echo "Snapshot OK: database $DB_NAME, $(find uploads -type f | wc -l | tr -d ' ') uploaded file(s)" >&2
+echo "Snapshot OK: database $DB_NAME" >&2
 tar -C "$STAGE" -czf - .
 REMOTE
 )

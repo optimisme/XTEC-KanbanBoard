@@ -11,10 +11,8 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
   ]);
 
   const title = h('input', { type: 'text', maxlength: '200', required: true, value: task ? task.title : '' });
-  const description = h('textarea', { class: 'code', rows: '10' });
+  const description = h('textarea', { class: 'code', rows: '14' });
   description.value = task ? task.description : '';
-  const criteria = h('textarea', { class: 'code', rows: '5' });
-  criteria.value = task ? task.acceptance_criteria : '';
   const moduleList = checkList(
     project.modules.map((m) => ({ id: m.id, chip: moduleChip(m) })),
     task ? task.modules.map((m) => m.id) : [],
@@ -31,7 +29,6 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
           const body = {
             title: title.value,
             description: description.value,
-            acceptance_criteria: criteria.value,
             module_ids: moduleList.values(),
           };
           const saved = task ? await api.put(`/api/tasks/${task.id}`, body) : await api.post(`/api/projects/${projectId}/tasks`, body);
@@ -42,11 +39,10 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
       },
     },
     task
-      ? h('div', { class: 'notice' }, "Els canvis es veuran a tots els grups. L'estat, les persones responsables, els comentaris i les evidències no es modifiquen.")
+      ? h('div', { class: 'notice' }, "Els canvis es veuran a tots els grups. L'estat, les persones responsables, els comentaris i l'historial no es modifiquen.")
       : h('div', { class: 'notice' }, 'La tasca s\'afegirà al final de la llista i apareixerà com a pendent a tots els grups.'),
     field('Títol', title),
     field('Descripció', description, 'Admet Markdown: títols, llistes, enllaços, imatges i blocs de codi.'),
-    field("Criteris d'acceptació", criteria, 'Admet Markdown.'),
     h('div', { class: 'field' }, h('label', {}, 'Mòduls professionals (almenys un)'), moduleList.el),
     h('div', { class: 'card-actions' }, save)
   );
@@ -64,9 +60,7 @@ export async function openVersions(taskId) {
       h('h3', { style: { margin: '12px 0 6px' } }, v.title),
       h('div', { class: 'chips', style: { 'margin-bottom': '10px' } }, v.modules.map((m) => h('span', { class: 'tag' }, m.name))),
       h('div', { class: 'section-title' }, 'Descripció'),
-      v.description_html ? h('div', { class: 'markdown', html: v.description_html }) : h('p', { class: 'muted' }, 'Sense descripció.'),
-      h('div', { class: 'section-title', style: { 'margin-top': '12px' } }, "Criteris d'acceptació"),
-      v.acceptance_criteria_html ? h('div', { class: 'markdown', html: v.acceptance_criteria_html }) : h('p', { class: 'muted' }, 'Sense criteris.'))));
+      v.description_html ? h('div', { class: 'markdown', html: v.description_html }) : h('p', { class: 'muted' }, 'Sense descripció.'))));
   modal({ title: 'Historial de versions', body, wide: true });
 }
 
@@ -78,9 +72,7 @@ export async function openDefinition(taskId, { canManage, writable, onChanged })
       moduleChips(task.modules),
       h('span', { class: 'muted' }, `Versió ${task.version} · ${task.author.name} · ${formatDateTime(task.updated_at)}`)),
     h('h3', { class: 'section-title' }, 'Descripció'),
-    task.description_html ? h('div', { class: 'box markdown', html: task.description_html }) : h('p', { class: 'muted' }, 'Sense descripció.'),
-    h('h3', { class: 'section-title' }, "Criteris d'acceptació"),
-    task.acceptance_criteria_html ? h('div', { class: 'box markdown', html: task.acceptance_criteria_html }) : h('p', { class: 'muted' }, "Sense criteris d'acceptació."));
+    task.description_html ? h('div', { class: 'box markdown', html: task.description_html }) : h('p', { class: 'muted' }, 'Sense descripció.'));
 
   const footer = canManage
     ? [

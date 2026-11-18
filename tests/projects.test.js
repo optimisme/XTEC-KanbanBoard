@@ -21,7 +21,6 @@ after(teardown);
 const taskBody = (overrides = {}) => ({
   title: 'New task',
   description: 'Text',
-  acceptance_criteria: '- Done',
   module_ids: [s.modules.programming.id],
   ...overrides,
 });
@@ -302,7 +301,8 @@ Create the relational database schema.
   assert.deepEqual(imported.body.map((t) => t.title), ['Create GitHub Repository', 'Design Database']);
   assert.deepEqual(imported.body[1].modules.map((m) => m.name), ['Databases', 'Programming']);
   assert.match(imported.body[1].description, /## not a task heading/);
-  assert.match(imported.body[0].acceptance_criteria, /Every group member has access/);
+  // Sections such as "Acceptance Criteria" are simply part of the description.
+  assert.match(imported.body[0].description, /### Acceptance Criteria[\s\S]*Every group member has access/);
 
   const project = (await s.admin.get(`/api/projects/${empty.id}`)).body;
   for (const group of project.groups) {
@@ -366,7 +366,6 @@ test('26. archived projects cannot be modified through normal editing endpoints'
     s.admin.put(`/api/projects/${s.project.id}/tasks/order`, { task_ids: s.tasks.map((t) => t.id) }),
     student1.post(`/api/group-tasks/${gt.id}/status`, { status: 'in_progress' }),
     student1.post(`/api/group-tasks/${gt.id}/comments`, { content: 'late' }),
-    student1.post(`/api/group-tasks/${gt.id}/attachments`, { url: 'https://example.com' }),
     teacher.post(`/api/group-tasks/${gt.id}/responsible`, { user_id: s.users.s2.id }),
     student1.put(`/api/groups/${s.group0.id}/github`, { github_url: 'https://github.com/a/b' }),
   ];

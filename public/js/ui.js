@@ -29,7 +29,6 @@ const ICON_PATHS = {
   blocked: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM5.6 5.6l12.8 12.8',
   completed: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-4-9 3 3 5-6',
   comment: 'M4 5h16v11H9l-5 4V5Z',
-  clip: 'm20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0',
   up: 'm6 15 6-6 6 6',
   down: 'm6 9 6 6 6-6',
@@ -80,7 +79,6 @@ export const EVENT_LABELS = {
   completed: 'ha finalitzat la tasca',
   reopened: 'ha reobert la tasca',
   comment_added: 'ha afegit un comentari',
-  evidence_uploaded: 'ha afegit una evidència',
 };
 
 export function statusBadge(status) {
@@ -130,12 +128,6 @@ export function formatDuration(seconds) {
 
 export const secondsSince = (value) => (Date.now() - new Date(value).getTime()) / 1000;
 
-export function formatBytes(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} kB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
 // ---- Feedback ------------------------------------------------------------------
 
 export function toast(message, type = 'info') {
@@ -163,7 +155,7 @@ export async function run(button, action) {
 
 const openModals = [];
 
-export function modal({ title, body, footer, wide = false, onClose }) {
+export function modal({ title, body, footer, wide = false, fit = false, onClose }) {
   const previousFocus = document.activeElement;
   const titleId = `modal-title-${Date.now()}-${openModals.length}`;
   const closeButton = h('button', { class: 'btn ghost icon-only', type: 'button', 'aria-label': 'Tanca' }, icon('close'));
@@ -172,7 +164,7 @@ export function modal({ title, body, footer, wide = false, onClose }) {
   const footerEl = h('div', { class: 'modal-footer' }, footer || []);
   const dialog = h(
     'div',
-    { class: `modal ${wide ? 'wide' : ''}`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId, tabindex: '-1' },
+    { class: `modal ${wide ? 'wide' : ''} ${fit ? 'fit' : ''}`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId, tabindex: '-1' },
     h('div', { class: 'modal-header' }, titleEl, closeButton),
     bodyEl,
     footer ? footerEl : null

@@ -54,55 +54,47 @@ function renderLogin() {
   const error = LOGIN_ERRORS[params.get('error')];
   const { dev_auth: devAuth, oidc_configured: oidcConfigured } = state.session;
 
-  let devForm = null;
-  if (devAuth) {
-    const email = h('input', { type: 'email', required: true, placeholder: 'nom@domini.cat', autocomplete: 'username' });
-    const name = h('input', { type: 'text', placeholder: 'Nom i cognoms' });
-    const submit = h('button', { class: 'btn', type: 'submit' }, 'Entra (desenvolupament)');
-    devForm = h(
-      'form',
-      {
-        class: 'dev-login',
-        onSubmit: (event) => {
-          event.preventDefault();
-          run(submit, async () => {
-            const result = await api.post('/auth/dev-login', { email: email.value, name: name.value });
-            setCsrfToken(result.csrf_token);
-            window.location.hash = '';
-            await start();
-          });
-        },
-      },
-      h('p', { class: 'muted' }, "Accés de desenvolupament. No està disponible en producció."),
-      field('Correu institucional', email),
-      field('Nom (només el primer cop)', name),
-      submit
-    );
-  }
+  // One form for everyone who does not come through the identity provider:
+  // the administrator from .env (username + password) and, in development
+  // only, institutional emails (no password).
+  const adminLogin = state.session.admin_login;
+  let form = null;
+  if (adminLogin || devAuth) {
+    const identifier = h('input', {
+      type: 'text', required: true, autocomplete: 'username', autocapitalize: 'none', spellcheck: 'false',
+      placeholder: devAuth ? 'nom@domini.cat' : null,
+    });
+    const password = h('input', { type: 'password', autocomplete: 'current-password', required: adminLogin && !devAuth });
+    const submit = h('button', { class: 'btn', type: 'submit' }, 'Entra');
+    const label = adminLogin && devAuth ? 'Usuari o correu institucional' : adminLogin ? 'Usuari' : 'Correu institucional';
 
-  let adminForm = null;
-  if (state.session.admin_login) {
-    const username = h('input', { type: 'text', required: true, autocomplete: 'username', autocapitalize: 'none' });
-    const password = h('input', { type: 'password', required: true, autocomplete: 'current-password' });
-    const submit = h('button', { class: 'btn', type: 'submit' }, 'Entra com a administració');
-    adminForm = h(
+    form = h(
       'form',
       {
         class: 'dev-login',
         onSubmit: (event) => {
           event.preventDefault();
           run(submit, async () => {
-            const result = await api.post('/auth/admin-login', { username: username.value, password: password.value });
+            const value = identifier.value.trim();
+            // Emails are development accounts; anything else is the administrator.
+            const result = devAuth && (value.includes('@') || !adminLogin)
+              ? await api.post('/auth/dev-login', { email: value })
+              : await api.post('/auth/admin-login', { username: value, password: password.value });
             setCsrfToken(result.csrf_token);
             window.location.hash = '';
             await start();
           });
         },
       },
-      h('p', { class: 'muted' }, "Accés d'administració"),
-      field('Usuari', username),
-      field('Contrasenya', password),
-      submit
+      field(label, identifier),
+      adminLogin
+        ? field('Contrasenya', password, devAuth ? "Només cal per al compte d'administració." : null)
+        : null,
+      submit,
+      devAuth
+        ? h('p', { class: 'muted', style: { 'margin-top': '12px' } },
+            'Mode de desenvolupament: els correus institucionals entren sense contrasenya. No està disponible en producció.')
+        : null
     );
   }
 
@@ -113,8 +105,7 @@ function renderLogin() {
     oidcConfigured
       ? h('a', { class: 'btn primary', href: '/auth/login' }, 'Inicia la sessió amb el compte institucional')
       : h('div', { class: 'notice' }, "L'autenticació institucional encara no està configurada."),
-    adminForm,
-    devForm
+    form
   );
 }
 

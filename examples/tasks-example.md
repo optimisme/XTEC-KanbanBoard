@@ -8,8 +8,6 @@
 
 Create the group's GitHub repository.
 
-### Acceptance Criteria
-
 - The repository exists.
 - Every group member has access.
 
@@ -24,8 +22,6 @@ Create the group's GitHub repository.
 Create the relational database schema.
 
 ![Database diagram](https://example.com/diagram.png)
-
-### Acceptance Criteria
 
 - Complete entity-relationship diagram.
 - Primary and foreign keys are defined.
