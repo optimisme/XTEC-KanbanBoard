@@ -1,0 +1,62 @@
+#!/bin/bash
+# Setup NAT redirect: 80 -> $SERVER_PORT (idempotent, password-safe)
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/config.env"
+: "${DEFAULT_HOST:?Configura DEFAULT_HOST a proxmox/config.env}"
+: "${DEFAULT_SSH_PORT:?Configura DEFAULT_SSH_PORT a proxmox/config.env}"
+: "${DEFAULT_USER:?Configura DEFAULT_USER a proxmox/config.env}"
+
+USER=${1:-$DEFAULT_USER}
+RSA_PATH=${2:-"$DEFAULT_RSA_PATH"}
+SERVER_PORT=${3:-$DEFAULT_SERVER_PORT}
+RSA_PATH="${RSA_PATH%$'\r'}"
+SSH_OPTS='-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa'
+
+echo "Server port: $SERVER_PORT"
+[[ -f "$RSA_PATH" ]] || { echo "Error: no troba la clau: $RSA_PATH"; exit 1; }
+
+# read -s -p "Pwd sudo remota: " SUDO_PASSWORD
+# echo
+# ESC_PWD=$(printf "%q" "$SUDO_PASSWORD")
+
+eval "$(ssh-agent -s)" >/dev/null
+ssh-add "$RSA_PATH" >/dev/null
+
+# Prepare remote script with real port substituted
+REMOTE_SCRIPT=$(cat <<'EOF'
+set -euo pipefail
+# run_sudo() { echo "$SUDO_PASSWORD" | sudo -S -p '' "$@"; }
+run_sudo() { sudo -S -p '' "$@"; }
+
+export DEBIAN_FRONTEND=noninteractive
+run_sudo apt-get update -qq
+run_sudo apt-get install -y -qq iptables-persistent >/dev/null
+
+# Idempotent check
+if run_sudo iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports SERVER_PORT_VALUE 2>/dev/null; then
+  echo "Ja existeix la redirecció 80 -> SERVER_PORT_VALUE"
+else
+  echo "Afegint redirecció 80 -> SERVER_PORT_VALUE..."
+  run_sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports SERVER_PORT_VALUE
+fi
+
+# Persist
+TMP=$(mktemp)
+run_sudo iptables-save > "$TMP"
+run_sudo install -m 600 "$TMP" /etc/iptables/rules.v4
+rm -f "$TMP"
+command -v systemctl >/dev/null 2>&1 && run_sudo systemctl restart netfilter-persistent || true
+
+echo "✔︎ Redirecció 80 -> SERVER_PORT_VALUE configurada i persistida."
+EOF
+)
+
+# Substitute port before sending
+REMOTE_SCRIPT="${REMOTE_SCRIPT//SERVER_PORT_VALUE/$SERVER_PORT}"
+
+# ssh -T -p "$DEFAULT_SSH_PORT" $SSH_OPTS "$USER@$DEFAULT_HOST" "SUDO_PASSWORD=$ESC_PWD bash -s" <<<"$REMOTE_SCRIPT"
+ssh -T -p "$DEFAULT_SSH_PORT" $SSH_OPTS "$USER@$DEFAULT_HOST" "sudo bash -s" <<<"$REMOTE_SCRIPT"
+
+ssh-agent -k >/dev/null

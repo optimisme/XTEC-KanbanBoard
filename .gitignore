@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+uploads/
+logs/
+coverage/
+dist/
+
+.DS_Store
+
+# Deployment: local server connection settings, backups and build packages
+proxmox/config.env
+backups/
+server-package.zip

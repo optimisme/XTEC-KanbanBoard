@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Connects to the remote server using SSH
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/config.env"
+: "${DEFAULT_HOST:?Configura DEFAULT_HOST a proxmox/config.env}"
+: "${DEFAULT_SSH_PORT:?Configura DEFAULT_SSH_PORT a proxmox/config.env}"
+: "${DEFAULT_USER:?Configura DEFAULT_USER a proxmox/config.env}"
+
+USER=${1:-$DEFAULT_USER}
+RSA_PATH=${2:-"$DEFAULT_RSA_PATH"}
+RSA_PATH="${RSA_PATH%$'\r'}"  
+SSH_OPTS='-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa'
+
+echo "User: $USER"
+echo "Ruta RSA: $RSA_PATH"
+
+if [[ ! -f "${RSA_PATH}" ]]; then  
+  echo "Error: No s'ha trobat el fitxer de clau privada: $RSA_PATH"
+  exit 1
+fi
+
+# Establish SSH connection
+ssh -i "${RSA_PATH}" -p "$DEFAULT_SSH_PORT" $SSH_OPTS "$USER@$DEFAULT_HOST"  
