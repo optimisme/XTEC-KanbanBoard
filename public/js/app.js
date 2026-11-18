@@ -42,13 +42,10 @@ async function logout() {
 
 // ---- Screens shown outside the application ------------------------------------
 
-// A centered card. `below` is optional content shown under the card.
-function centerScreen(children, below = null) {
+function centerScreen(children) {
   append(clear(root),
     h('main', { class: 'center-screen', id: 'main' },
-      h('div', { class: 'center-column' },
-        h('div', { class: 'card center-card' }, h('img', { src: '/assets/favicon.svg', alt: '' }), children),
-        below))
+      h('div', { class: 'card center-card' }, h('img', { src: '/assets/favicon.svg', alt: '' }), children))
   );
 }
 
@@ -74,7 +71,7 @@ function renderLogin() {
     form = h(
       'form',
       {
-        class: 'dev-login',
+        class: 'login-form',
         onSubmit: (event) => {
           event.preventDefault();
           run(submit, async () => {
@@ -101,8 +98,8 @@ function renderLogin() {
     );
   }
 
-  // Institutional sign-in, under the card. Before the identity provider is
-  // configured the server sends the visitor back here with a short message.
+  // Institutional sign-in, below a divider inside the card. Before the identity
+  // provider is configured the server sends the visitor back here with a short message.
   const providerName = state.session.oidc_provider === 'microsoft' ? 'Microsoft' : 'Google';
   const oauth = h('div', { class: 'oauth-login' },
     h('a', { class: 'btn primary', href: '/auth/login' }, `Entra amb ${providerName}`));
@@ -111,7 +108,8 @@ function renderLogin() {
     h('h1', {}, 'Kanban educatiu'),
     error ? h('div', { class: 'notice error', role: 'alert' }, error) : null,
     form,
-  ], oauth);
+    oauth,
+  ]);
 }
 
 function renderAccountState(user) {

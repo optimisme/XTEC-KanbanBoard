@@ -435,15 +435,13 @@ td.actions .btn + .btn { margin-left: 6px; }
 /* ---- Auth screens ------------------------------------------------------ */
 
 .center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
-.center-column { width: 100%; max-width: 420px; }
-.center-card { text-align: center; padding: 32px 28px; }
-.oauth-login { margin-top: 16px; text-align: center; }
-.oauth-login .btn { width: 100%; min-height: 44px; }
-.oauth-login p { margin: 8px 0 0; }
+.center-card { width: 100%; max-width: 420px; text-align: center; padding: 32px 28px; }
 .center-card img { width: 44px; height: 44px; margin-bottom: 14px; }
 .center-card h1 { margin-bottom: 8px; }
 .center-card .btn { width: 100%; margin-top: 14px; }
-.dev-login { margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--border-strong); text-align: left; }
+.login-form { margin-top: 20px; text-align: left; }
+.oauth-login { margin-top: 24px; padding-top: 10px; border-top: 1px dashed var(--border-strong); }
+.login-form + .oauth-login .btn { min-height: 40px; }
 
 /* ---- Toasts ------------------------------------------------------------ */
 
