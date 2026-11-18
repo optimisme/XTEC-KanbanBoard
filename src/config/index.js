@@ -103,6 +103,8 @@ const config = {
   nodeEnv,
   isProduction,
   isTest,
+  // Name shown in the page title, the header and the login screen.
+  appName: optional('APP_NAME', 'Kanban educatiu').slice(0, 60),
   port: integer('PORT', 3000),
   appUrl: required('APP_URL').replace(/\/+$/, ''),
   db: {

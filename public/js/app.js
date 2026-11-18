@@ -105,7 +105,7 @@ function renderLogin() {
     h('a', { class: 'btn primary', href: '/auth/login' }, `Entra amb ${providerName}`));
 
   centerScreen([
-    h('h1', {}, 'Kanban educatiu'),
+    h('h1', {}, state.session.app_name),
     error ? h('div', { class: 'notice error', role: 'alert' }, error) : null,
     form,
     oauth,
@@ -145,7 +145,7 @@ function renderShell(route) {
   const main = h('main', { class: `main ${route && route.wide ? 'wide' : ''}`, id: 'main', tabindex: '-1' });
   append(clear(root), 
     h('header', { class: 'topbar' },
-      h('a', { class: 'brand', href: '#/' }, h('img', { src: '/assets/favicon.svg', alt: '' }), 'Kanban educatiu'),
+      h('a', { class: 'brand', href: '#/' }, h('img', { src: '/assets/favicon.svg', alt: '' }), state.session.app_name),
       h('nav', { class: 'nav', 'aria-label': 'Navegació principal' }, nav),
       h('div', { class: 'userbox' },
         h('a', { href: '#/profile', title: 'El meu perfil' }, user.name),

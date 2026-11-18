@@ -33,8 +33,10 @@ function fingerprint(dir) {
 }
 const assetVersion = fingerprint(publicDir);
 const assetBase = `/static/${assetVersion}`;
+const escapeHtml = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const indexHtml = fs
   .readFileSync(path.join(publicDir, 'index.html'), 'utf8')
+  .replace(/<title>.*?<\/title>/, `<title>${escapeHtml(config.appName)}</title>`)
   .replace(/(href|src)="\/(css|js|assets)\//g, `$1="${assetBase}/$2/`);
 
 export function createApp() {

@@ -102,6 +102,7 @@ configuration at startup and refuses to start when something is missing.
 | Variable | Purpose |
 |---|---|
 | `NODE_ENV` | `development`, `production` or `test` |
+| `APP_NAME` | Name shown in the page title, header and login screen |
 | `PORT`, `APP_URL` | Listening port and public base URL |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | MySQL connection |
 | `OIDC_PROVIDER` | `google` or `microsoft` |
@@ -229,6 +230,7 @@ Create `.env.test`:
 
 ```dotenv
 NODE_ENV=test
+APP_NAME=Kanban de proves
 PORT=3999
 APP_URL=http://localhost:3999
 DB_HOST=127.0.0.1

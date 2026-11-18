@@ -215,3 +215,10 @@ test('frontend files are served under fingerprinted, long-cached URLs', async ()
   assert.equal((await request(app).get(script[1].replace('app.js', 'views/admin.js'))).status, 200);
   assert.equal((await request(app).get('/static/000000000000/js/app.js')).status, 404);
 });
+
+test('the application name comes from the configuration', async () => {
+  const session = await request(app).get('/api/session');
+  assert.equal(session.body.app_name, 'Kanban de proves');
+  const page = await request(app).get('/');
+  assert.match(page.text, /<title>Kanban de proves<\/title>/);
+});

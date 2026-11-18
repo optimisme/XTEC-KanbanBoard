@@ -28,6 +28,7 @@ export async function session(req, res) {
   res.json({
     user: req.user ? authService.publicUser(req.user) : null,
     csrf_token: csrfToken(req),
+    app_name: config.appName,
     dev_auth: config.devAuthEnabled,
     admin_login: config.adminLogin.enabled,
     oidc_configured: config.oidc.configured,
