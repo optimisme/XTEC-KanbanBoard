@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -15,6 +17,25 @@ import authRoutes from './routes/auth.js';
 
 const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const MySQLStore = mysqlSession(session);
+
+// Frontend files are served under a path that contains a fingerprint of their
+// contents (/static/<fingerprint>/...). Every deploy that changes a file gets
+// new URLs, so browsers and CDNs can cache them forever and still pick up a
+// new version at once. Only the small HTML page is never cached.
+function fingerprint(dir) {
+  const hash = crypto.createHash('sha256');
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile()) continue;
+    const file = path.join(entry.parentPath, entry.name);
+    hash.update(path.relative(dir, file)).update(fs.readFileSync(file));
+  }
+  return hash.digest('hex').slice(0, 12);
+}
+const assetVersion = fingerprint(publicDir);
+const assetBase = `/static/${assetVersion}`;
+const indexHtml = fs
+  .readFileSync(path.join(publicDir, 'index.html'), 'utf8')
+  .replace(/(href|src)="\/(css|js|assets)\//g, `$1="${assetBase}/$2/`);
 
 export function createApp() {
   const app = express();
@@ -71,7 +92,15 @@ export function createApp() {
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-  app.use(express.static(publicDir, { index: 'index.html' }));
+  app.get(['/', '/index.html'], (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.type('html').send(indexHtml);
+  });
+  // While developing, files change without a restart, so they are not cached.
+  const assetCache = config.nodeEnv === 'development' ? {} : { immutable: true, maxAge: '365d' };
+  app.use(assetBase, express.static(publicDir, { index: false, ...assetCache }));
+  // Unversioned paths stay available (for example the icon used inside the app).
+  app.use(express.static(publicDir, { index: false }));
   app.use(authRoutes);
   app.use('/api', (req, res, next) => {
     res.set('Cache-Control', 'no-store');

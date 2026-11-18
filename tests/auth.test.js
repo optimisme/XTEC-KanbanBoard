@@ -199,3 +199,19 @@ test('users added in advance by email sign in without approval', async () => {
     { code: 'email_not_verified' }
   );
 });
+
+test('frontend files are served under fingerprinted, long-cached URLs', async () => {
+  const page = await request(app).get('/');
+  assert.equal(page.status, 200);
+  assert.equal(page.headers['cache-control'], 'no-store');
+  const script = page.text.match(/src="(\/static\/[0-9a-f]{12}\/js\/app\.js)"/);
+  assert.ok(script, 'index.html points at a fingerprinted app.js');
+  assert.match(page.text, /href="\/static\/[0-9a-f]{12}\/css\/styles\.css"/);
+
+  const asset = await request(app).get(script[1]);
+  assert.equal(asset.status, 200);
+  assert.match(asset.headers['cache-control'], /max-age=31536000, immutable/);
+  // Modules imported by app.js resolve under the same fingerprinted folder.
+  assert.equal((await request(app).get(script[1].replace('app.js', 'views/admin.js'))).status, 200);
+  assert.equal((await request(app).get('/static/000000000000/js/app.js')).status, 404);
+});

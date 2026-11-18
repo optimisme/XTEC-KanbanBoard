@@ -144,7 +144,11 @@ group completes a task, the current version number is stored with it.
 ## Frontend
 
 A single-page application written as plain ES modules with hash routing.
-There is no build step: `public/` is served as is. `ui.js` provides a small
+There is no build step: `public/` is served as is, under
+`/static/<fingerprint>/`, where the fingerprint is a hash of the frontend
+files computed at startup. `index.html` is never cached and points at the
+current fingerprint, so a deploy is visible immediately even behind a CDN
+that caches scripts and styles for hours. `ui.js` provides a small
 element builder; all text is inserted as text nodes, and only
 server-sanitized Markdown is inserted as HTML.
 
