@@ -332,6 +332,7 @@ Proxmox container.
 | Add a teacher to a project by email (creating the account if needed) | ✔ | ✔ | |
 | Create and manage the project's tags | ✔ | ✔ | |
 | Remove teachers from a project | ✔ | | |
+| Delete an archived project permanently | ✔ | | |
 | Create projects | ✔ | ✔ | |
 | Edit, archive and duplicate a project | ✔ | ✔ | |
 | Create groups and add or remove their students (by email) | ✔ | ✔ | |
@@ -350,6 +351,18 @@ created. Only administrators remove teachers. An existing student account is
 never turned into a teacher this way. Teacher access
 depends **only** on that assignment (`project_teachers`).
 Tags classify and color tasks; they never grant or restrict permissions. Every rule is enforced by the backend.
+
+## Archiving and deleting projects
+
+Teachers and administrators **archive** a project when it ends: it becomes
+read-only and stays available, with all its history, under *Projectes
+arxivats*. It can be reactivated.
+
+Administrators see every project, active and archived, and can **delete** an
+archived one from its *Configuració* tab, after a confirmation. Deleting is
+permanent: the project's tasks, tags, groups, progress, comments and history
+are erased (user accounts are kept). An active project cannot be deleted; it
+has to be archived first.
 
 ## Tags
 
@@ -477,7 +490,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 | Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/password-login`, `POST /auth/logout`, `GET /api/session` |
 | Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PUT /api/profile/password`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
 | Tags | `GET/POST /api/projects/:id/tags`, `GET /api/projects/:id/tags/suggestions`, `PUT/DELETE /api/tags/:id` |
-| Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers` |
+| Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `DELETE /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers` |
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
 | Shared tasks | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |
 | Import | `GET /api/projects/:id/import/template`, `POST …/import/preview`, `POST …/import` |

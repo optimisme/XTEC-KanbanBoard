@@ -47,7 +47,7 @@ created at the same time cannot miss each other.
 | A task only uses tags of its own project | `task_tags (tag_id, project_id)` → `project_tags (id, project_id)` |
 | Tag names are unique inside a project | `UNIQUE (project_id, name)` on `project_tags` |
 | At most one open block per task | Unique key over a generated column that is `1` while `unblocked_at IS NULL` |
-| History is not lost | No `ON DELETE CASCADE` anywhere; projects are archived, tasks are soft-deleted |
+| History is not lost by accident | Projects are archived and tasks soft-deleted in normal use. The only hard delete is an administrator erasing a whole project that has already been archived, done explicitly table by table |
 
 ### No priority levels
 

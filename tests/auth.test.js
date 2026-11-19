@@ -205,6 +205,13 @@ test('users set a password and sign in with email and password', async () => {
   const disabled = await attempt('pw.user@xtec.cat', 'another good one');
   assert.equal((await disabled.agent.get('/api/projects')).body.error.code, 'account_disabled');
 
+  // Administrators can correct anybody's name; other people cannot.
+  const fixed = await admin.patch(`/api/users/${other.id}`, { name: 'Fixed By Admin' });
+  assert.equal(fixed.status, 200);
+  assert.equal(fixed.body.name, 'Fixed By Admin');
+  assert.equal((await admin.patch(`/api/users/${other.id}`, { name: '   ' })).status, 400);
+  assert.equal((await otherClient.patch(`/api/users/${user.id}`, { name: 'Nope' })).status, 403);
+
   // People can change their own name.
   const renamed = await otherClient.patch('/api/profile', { name: 'Renamed Person' });
   assert.equal(renamed.body.name, 'Renamed Person');

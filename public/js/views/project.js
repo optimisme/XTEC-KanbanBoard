@@ -2,12 +2,12 @@
 // students and (administrators only) settings.
 import { api } from '../api.js';
 import {
-  append, checkList, clear, confirmDialog, field, h, icon, modal, promptDialog, readableTextColor, run, showError,
+  append, clear, confirmDialog, field, h, icon, modal, promptDialog, readableTextColor, run, showError,
   STATUS_LABELS, tagChip, tagChips,
   STATUSES, statusBadge, toast,
 } from '../ui.js';
 import { emailSuggestions } from '../people.js';
-import { openProjectForm } from './projects.js';
+import { academicYearSelect, openProjectForm } from './projects.js';
 import { openDefinition, openImport, openTaskEditor } from './taskEditor.js';
 import { openTaskModal } from './taskModal.js';
 
@@ -315,19 +315,21 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
   // ---- Settings (administrators) -----------------------------------------------------
 
   async function settingsTab() {
-    // Only administrators decide which teachers belong to a project.
-    const teachers = isAdmin ? await api.get('/api/users?role=teacher&status=active') : [];
-    const teacherList = checkList(
-      teachers.map((t) => ({ id: t.id, label: t.name, detail: t.email })),
-      project.teachers.map((t) => t.id),
-      { emptyText: 'No hi ha professorat actiu. Assigna el rol a «Usuaris».' }
-    );
-    const saveTeachers = h('button', { class: 'btn primary', type: 'button', disabled: !writable }, 'Desa el professorat');
-    saveTeachers.addEventListener('click', () => run(saveTeachers, async () => {
-      await api.put(`/api/projects/${project.id}/teachers`, { teacher_ids: teacherList.values() });
-      toast('Professorat actualitzat.');
-      reload();
-    }));
+    // Removing a teacher saves at once. Only administrators can remove.
+    async function removeTeacher(teacher, button) {
+      const ok = await confirmDialog({
+        title: 'Treu del projecte',
+        message: `${teacher.name} deixarà de tenir accés a aquest projecte. El seu compte es conserva.`,
+        confirmLabel: 'Treu', danger: true,
+      });
+      if (!ok) return;
+      await run(button, async () => {
+        const remaining = project.teachers.filter((t) => t.id !== teacher.id).map((t) => t.id);
+        await api.put(`/api/projects/${project.id}/teachers`, { teacher_ids: remaining });
+        toast(`${teacher.name} ja no és professor/a del projecte.`);
+        reload();
+      });
+    }
 
     // Teachers and administrators add a colleague by email. An email without
     // an account asks for the person's name and creates a teacher account.
@@ -431,10 +433,28 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       if (ok) await run(archive, async () => { await api.post(`/api/projects/${project.id}/${writable ? 'archive' : 'unarchive'}`); reload(); });
     });
 
+    // Administrators only, and only once the project is archived.
+    const erase = h('button', { class: 'btn danger', type: 'button' }, 'Esborra el projecte');
+    erase.addEventListener('click', async () => {
+      const ok = await confirmDialog({
+        title: 'Esborra el projecte',
+        message: `Vols esborrar definitivament «${project.name}»? S'esborraran les tasques, els grups, el progrés, els comentaris i l'historial. No es pot desfer. Els comptes d'usuari es conserven.`,
+        confirmLabel: 'Esborra definitivament',
+        danger: true,
+      });
+      if (!ok) return;
+      await run(erase, async () => {
+        await api.del(`/api/projects/${project.id}`);
+        toast('Projecte esborrat.');
+        window.location.hash = '#/';
+      });
+    });
+
     function openDuplicate() {
       const [start] = project.academic_year.split('-').map(Number);
       const name = h('input', { type: 'text', maxlength: '200', required: true, value: project.name });
-      const year = h('input', { type: 'text', required: true, pattern: '\\d{4}-(\\d{2}|\\d{4})', value: `${start + 1}-${start + 2}` });
+      // The copy is proposed for the year after the original.
+      const year = academicYearSelect(`${start + 1}-${start + 2}`);
       const description = h('textarea', { rows: '3' });
       description.value = project.description || '';
       const save = h('button', { class: 'btn primary', type: 'submit' }, 'Duplica');
@@ -464,26 +484,31 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         h('h2', {}, 'Dades del projecte'),
         h('div', { class: 'card-actions' },
           h('button', { class: 'btn', type: 'button', disabled: !writable, onClick: () => openProjectForm({ project, onSaved: reload }).catch(showError) }, 'Edita el projecte'))),
-      isAdmin
-        ? h('div', { class: 'card' },
+      h('div', { class: 'card' },
         h('h2', {}, 'Professorat assignat'),
         h('p', { class: 'muted' }, 'El professorat assignat pot gestionar totes les tasques i tots els grups del projecte.'),
-        teacherList.el,
-        h('div', { class: 'card-actions' }, saveTeachers),
-        writable ? addTeacherForm() : null)
-        : h('div', { class: 'card' },
-            h('h2', {}, 'Professorat assignat'),
-            h('ul', { class: 'member-list' }, project.teachers.map((t) =>
-              h('li', {}, h('div', {}, h('strong', {}, t.name), h('div', { class: 'muted' }, t.email))))),
-            writable ? addTeacherForm() : null,
-            h('p', { class: 'muted', style: { 'margin-top': '10px' } }, "Per treure professorat d'aquest projecte, contacta amb administració.")),
+        h('ul', { class: 'member-list' }, project.teachers.length === 0
+          ? h('li', { class: 'muted' }, 'Aquest projecte encara no té professorat assignat.')
+          : project.teachers.map((teacher) => {
+              const remove = h('button', { class: 'btn ghost small danger', type: 'button', 'aria-label': `Treu ${teacher.name}` }, 'Treu');
+              remove.addEventListener('click', () => removeTeacher(teacher, remove));
+              return h('li', {},
+                h('div', {}, h('strong', {}, teacher.name), h('div', { class: 'muted' }, teacher.email)),
+                isAdmin && writable ? remove : null);
+            })),
+        writable ? addTeacherForm() : null,
+        isAdmin ? null : h('p', { class: 'muted', style: { 'margin-top': '10px' } }, "Per treure professorat d'aquest projecte, contacta amb administració.")),
       await tagsCard(),
       h('div', { class: 'card' },
         h('h2', {}, 'Cicle de vida'),
         h('p', { class: 'muted' }, 'Duplica el projecte per a un curs nou o arxiva\'l quan acabi.'),
         h('div', { class: 'card-actions' },
           h('button', { class: 'btn', type: 'button', onClick: openDuplicate }, 'Duplica per a un altre curs'),
-          archive))
+          archive,
+          isAdmin && !writable ? erase : null),
+        isAdmin && writable
+          ? h('p', { class: 'muted', style: { 'margin-top': '10px' } }, "Per esborrar un projecte, primer cal arxivar-lo.")
+          : null)
     );
   }
 }

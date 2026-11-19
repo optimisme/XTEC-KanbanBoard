@@ -96,6 +96,22 @@ export async function setStatus(user, projectId, status) {
   return get(user, projectId);
 }
 
+// Permanent deletion, for administrators only and only for archived projects:
+// a project has to be archived first, so an active one can never be erased in
+// a single step. It removes the project's tasks, groups, progress, comments
+// and history.
+export async function remove(user, projectId) {
+  requireAdmin(user);
+  await db.tx(async (t) => {
+    const project = await projectRepo.lock(t, projectId);
+    if (!project) throw notFound("No s'ha trobat el projecte.");
+    if (project.status !== 'archived') {
+      throw conflict('Només es poden esborrar projectes arxivats. Arxiva primer el projecte.', 'project_not_archived');
+    }
+    await projectRepo.removeCompletely(t, projectId);
+  });
+}
+
 // A project's teachers (and administrators) can bring in another teacher by
 // institutional email. An email without an account creates a teacher account
 // (a name is then required); a pending account is approved as a teacher. An

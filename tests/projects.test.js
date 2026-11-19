@@ -598,3 +598,58 @@ test('known emails are suggested to staff while adding students or teachers', as
   assert.equal((await suggest(student1, 'students', 's2')).status, 403);
   assert.equal((await suggest(student1, 'teachers', 'te')).status, 403);
 });
+
+test('administrators see every project and can delete archived ones permanently', async () => {
+  // A project with real activity: tasks, a group, progress, a block, a comment.
+  const project = (await teacher.post('/api/projects', { name: 'To delete', academic_year: '2026-2027' })).body;
+  await teacher.post(`/api/projects/${project.id}/tasks`, taskBody({ title: 'Doomed', tags: ['Temporary'] }));
+  const withGroup = (await teacher.post(`/api/projects/${project.id}/groups`, { students: [{ email: 's2@xtec.cat' }] })).body;
+  const student2 = await login('s2@xtec.cat');
+  const board = (await student2.get(`/api/groups/${withGroup.groups[0].id}/board`)).body;
+  const gt = board.tasks[0].id;
+  await student2.post(`/api/group-tasks/${gt}/status`, { status: 'in_progress' });
+  await student2.post(`/api/group-tasks/${gt}/status`, { status: 'blocked', reason: 'stuck' });
+  await student2.post(`/api/group-tasks/${gt}/comments`, { content: 'help' });
+  await teacher.post(`/api/projects/${project.id}/archive`);
+
+  // Administrators list every project, active and archived, assigned or not.
+  const all = (await s.admin.get('/api/projects')).body;
+  const total = (await db.query('SELECT COUNT(*) AS n FROM projects'))[0].n;
+  assert.equal(all.length, total);
+  assert.equal(all.find((p) => p.id === project.id).status, 'archived');
+
+  // An active project cannot be deleted, not even by an administrator: archive first.
+  const del = (client) => client.del(`/api/projects/${project.id}`);
+  await teacher.post(`/api/projects/${project.id}/unarchive`);
+  const active = await del(s.admin);
+  assert.equal(active.status, 409);
+  assert.equal(active.body.error.code, 'project_not_archived');
+  assert.equal((await s.admin.get(`/api/projects/${project.id}`)).status, 200);
+  await teacher.post(`/api/projects/${project.id}/archive`);
+
+  // Only administrators delete.
+  assert.equal((await del(teacher)).status, 403);
+  assert.equal((await del(student1)).status, 403);
+  assert.equal((await s.admin.get(`/api/projects/${project.id}`)).status, 200);
+
+  const usersBefore = (await db.query('SELECT COUNT(*) AS n FROM users'))[0].n;
+  const otherTasksBefore = (await db.query('SELECT COUNT(*) AS n FROM group_tasks WHERE project_id = ?', [s.project.id]))[0].n;
+  assert.equal((await del(s.admin)).status, 204);
+
+  // Everything of that project is gone ...
+  assert.equal((await s.admin.get(`/api/projects/${project.id}`)).status, 404);
+  const [left] = await db.query(
+    `SELECT (SELECT COUNT(*) FROM projects WHERE id = ?) + (SELECT COUNT(*) FROM project_groups WHERE project_id = ?)
+          + (SELECT COUNT(*) FROM group_tasks WHERE project_id = ?) + (SELECT COUNT(*) FROM task_definitions WHERE project_id = ?)
+          + (SELECT COUNT(*) FROM project_tags WHERE project_id = ?) + (SELECT COUNT(*) FROM project_teachers WHERE project_id = ?)
+          + (SELECT COUNT(*) FROM task_history WHERE group_task_id = ?) + (SELECT COUNT(*) FROM task_comments WHERE group_task_id = ?)
+          + (SELECT COUNT(*) FROM task_block_events WHERE group_task_id = ?) AS n`,
+    [project.id, project.id, project.id, project.id, project.id, project.id, gt, gt, gt]
+  );
+  assert.equal(Number(left.n), 0);
+  // ... while accounts and other projects are untouched.
+  assert.equal((await db.query('SELECT COUNT(*) AS n FROM users'))[0].n, usersBefore);
+  assert.equal((await db.query('SELECT COUNT(*) AS n FROM group_tasks WHERE project_id = ?', [s.project.id]))[0].n, otherTasksBefore);
+  assert.equal((await student2.get('/api/projects')).body.some((p) => p.id === project.id), false);
+  assert.equal((await del(s.admin)).status, 404);
+});

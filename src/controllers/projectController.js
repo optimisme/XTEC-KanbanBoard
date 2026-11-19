@@ -28,6 +28,11 @@ export async function update(req, res) {
   res.json(await projectService.update(req.user, projectId(req), req.body));
 }
 
+export async function remove(req, res) {
+  await projectService.remove(req.user, projectId(req));
+  res.status(204).end();
+}
+
 export async function archive(req, res) {
   res.json(await projectService.setStatus(req.user, projectId(req), 'archived'));
 }

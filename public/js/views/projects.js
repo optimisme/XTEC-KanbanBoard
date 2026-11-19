@@ -2,19 +2,36 @@
 import { api } from '../api.js';
 import { append, field, h, modal, run } from '../ui.js';
 
-function defaultAcademicYear() {
+const YEARS_AHEAD = 5;
+
+// The academic year that is running today: it starts in September, so until
+// August it is still the one that began the previous calendar year.
+function currentStartYear() {
   const now = new Date();
-  const start = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  return `${start}-${start + 1}`;
+  return now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+}
+
+// Dropdown of academic years, from the current one onwards. Choosing the
+// first year fixes the second: every option is "year-(year + 1)". `selected`
+// is an existing value such as "2025-2026"; it is kept in the list even when
+// it is older than the current year. Without it, the current year is chosen.
+export function academicYearSelect(selected = null) {
+  const first = currentStartYear();
+  const starts = Array.from({ length: YEARS_AHEAD + 1 }, (_, i) => first + i);
+  const selectedStart = selected ? Number(String(selected).slice(0, 4)) : first;
+  if (!starts.includes(selectedStart)) starts.push(selectedStart);
+  starts.sort((a, b) => a - b);
+
+  const select = h('select', { required: true },
+    starts.map((start) => h('option', { value: `${start}-${start + 1}` }, `${start}-${start + 1}`)));
+  select.value = `${selectedStart}-${selectedStart + 1}`;
+  return select;
 }
 
 // Modal form used both to create and to edit a project.
 export async function openProjectForm({ project = null, onSaved }) {
   const name = h('input', { type: 'text', maxlength: '200', required: true, value: project ? project.name : '' });
-  const year = h('input', {
-    type: 'text', required: true, pattern: '\\d{4}-(\\d{2}|\\d{4})', placeholder: '2026-2027',
-    value: project ? project.academic_year : defaultAcademicYear(),
-  });
+  const year = academicYearSelect(project ? project.academic_year : null);
   const description = h('textarea', { rows: '4' });
   description.value = project ? project.description || '' : '';
   const save = h('button', { class: 'btn primary', type: 'submit' }, project ? 'Desa els canvis' : 'Crea el projecte');
@@ -39,7 +56,7 @@ export async function openProjectForm({ project = null, onSaved }) {
       },
     },
     field('Nom', name),
-    field('Curs acadèmic', year, 'Format: 2026-2027'),
+    field('Curs acadèmic', year),
     field('Descripció (opcional, admet Markdown)', description),
     h('div', { class: 'card-actions' }, save)
   );

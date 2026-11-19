@@ -54,6 +54,25 @@ export async function update(db, id, { name, description, academicYear }) {
   ]);
 }
 
+// Permanently removes a project and everything that belongs to it, children
+// first so that every foreign key is satisfied. User accounts are not touched.
+export async function removeCompletely(db, id) {
+  const byGroupTask = (table) =>
+    `DELETE x FROM ${table} x JOIN group_tasks gt ON gt.id = x.group_task_id WHERE gt.project_id = ?`;
+  await db.query(byGroupTask('task_history'), [id]);
+  await db.query(byGroupTask('task_block_events'), [id]);
+  await db.query(byGroupTask('task_comments'), [id]);
+  await db.query('DELETE FROM group_tasks WHERE project_id = ?', [id]);
+  await db.query('DELETE FROM group_students WHERE project_id = ?', [id]);
+  await db.query('DELETE FROM project_groups WHERE project_id = ?', [id]);
+  await db.query('DELETE FROM task_tags WHERE project_id = ?', [id]);
+  await db.query('DELETE v FROM task_versions v JOIN task_definitions td ON td.id = v.task_id WHERE td.project_id = ?', [id]);
+  await db.query('DELETE FROM task_definitions WHERE project_id = ?', [id]);
+  await db.query('DELETE FROM project_tags WHERE project_id = ?', [id]);
+  await db.query('DELETE FROM project_teachers WHERE project_id = ?', [id]);
+  await db.query('DELETE FROM projects WHERE id = ?', [id]);
+}
+
 export async function setStatus(db, id, status) {
   await db.query('UPDATE projects SET status = ? WHERE id = ?', [status, id]);
 }

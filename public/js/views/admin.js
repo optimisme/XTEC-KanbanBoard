@@ -1,7 +1,7 @@
 // Administrator screen: user management (with pending approvals).
 import { api } from '../api.js';
 import {
-  append, clear, field, formatDate, h, modal, ROLE_LABELS, run, toast,
+  append, clear, field, formatDate, h, modal, promptDialog, ROLE_LABELS, run, toast,
   USER_STATUS_LABELS,
 } from '../ui.js';
 
@@ -73,13 +73,24 @@ export async function renderUsers(view, params, { user: me }) {
             const toggle = h('button', { class: `btn small ${u.status === 'active' ? 'danger' : ''}`, type: 'button', disabled: self },
               u.status === 'active' ? 'Desactiva' : 'Activa');
             toggle.addEventListener('click', () => act(toggle, () => api.patch(`/api/users/${u.id}`, { status: next })));
+            const rename = h('button', { class: 'btn small', type: 'button' }, 'Canvia el nom');
+            rename.addEventListener('click', async () => {
+              const name = await promptDialog({ title: 'Canvia el nom', label: `Nom de ${u.email}`, value: u.name });
+              if (name === null || name === u.name) return;
+              await act(rename, async () => {
+                await api.patch(`/api/users/${u.id}`, { name });
+                toast('Nom actualitzat.');
+              });
+              // The administrator's own name is also shown in the top bar.
+              if (self) window.location.reload();
+            });
             return h('tr', {},
               h('td', {}, u.name, self ? h('span', { class: 'tag', style: { 'margin-left': '8px' } }, 'Tu') : null),
               h('td', { class: 'muted' }, u.email),
               h('td', {}, role),
               h('td', {}, h('span', { class: 'tag' }, USER_STATUS_LABELS[u.status])),
               h('td', { class: 'muted' }, u.last_login_at ? formatDate(u.last_login_at) : 'Encara no ha entrat'),
-              h('td', { class: 'actions' }, toggle));
+              h('td', { class: 'actions' }, rename, toggle));
           })))));
   }
 

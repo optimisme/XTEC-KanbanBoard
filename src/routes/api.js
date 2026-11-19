@@ -44,6 +44,7 @@ router.get('/projects', projects.list);
 router.post('/projects', projects.create);
 router.get('/projects/:projectId', projects.get);
 router.put('/projects/:projectId', projects.update);
+router.delete('/projects/:projectId', projects.remove);
 router.post('/projects/:projectId/archive', projects.archive);
 router.post('/projects/:projectId/unarchive', projects.unarchive);
 router.post('/projects/:projectId/duplicate', projects.duplicate);

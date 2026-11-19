@@ -326,30 +326,6 @@ export function field(label, control, hint) {
   return h('div', { class: 'field' }, h('label', { for: id }, label), control, hint ? h('div', { class: 'hint' }, hint) : null);
 }
 
-// A scrollable list of checkboxes. Returns { el, values() }.
-export function checkList(items, selectedIds, { disabledIds = new Map(), emptyText = 'No hi ha elements.' } = {}) {
-  const inputs = [];
-  const el = h(
-    'div',
-    { class: 'check-list' },
-    items.length === 0 ? h('span', { class: 'muted' }, emptyText) : null,
-    items.map((item) => {
-      const reason = disabledIds.get(item.id);
-      const input = h('input', { type: 'checkbox', value: String(item.id), disabled: Boolean(reason) });
-      input.checked = selectedIds.includes(item.id);
-      inputs.push(input);
-      return h(
-        'label',
-        { class: reason ? 'disabled' : '' },
-        input,
-        item.chip || h('span', {}, item.label),
-        item.detail || reason ? h('small', {}, reason || item.detail) : null
-      );
-    })
-  );
-  return { el, values: () => inputs.filter((i) => i.checked).map((i) => Number(i.value)) };
-}
-
 // Appends children like h() does: nested arrays are flattened and empty
 // values (null, undefined, false) are skipped.
 export function append(el, ...children) {
