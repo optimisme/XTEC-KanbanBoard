@@ -205,6 +205,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
           board.can_manage ? h('a', { href: `#/projects/${board.project.id}` }, board.project.name) : board.project.name),
         h('h1', {}, groupLabel(board.group.group_number, board.group.name))),
       h('div', { class: 'actions' },
+        board.project.hidden ? h('span', { class: 'tag hidden-tag' }, 'Ocult als estudiants') : null,
         board.project.status === 'archived' ? h('span', { class: 'tag' }, 'Projecte arxivat · només lectura') : null,
         board.can_manage && board.project.status === 'active'
           ? toggleSwitch("Permet l'edició", editing, (on) => { editing = on; draw(); })

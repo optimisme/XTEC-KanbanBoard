@@ -1,4 +1,4 @@
-const COLUMNS = 'p.id, p.name, p.description, p.academic_year, p.status, p.ranking_visible, p.created_at, p.updated_at';
+const COLUMNS = 'p.id, p.name, p.description, p.academic_year, p.status, p.hidden, p.ranking_visible, p.created_at, p.updated_at';
 
 export async function findById(db, id) {
   const rows = await db.query(`SELECT ${COLUMNS} FROM projects p WHERE p.id = ?`, [id]);
@@ -31,24 +31,28 @@ export function listForStudent(db, userId) {
        FROM projects p
        JOIN group_students gs ON gs.project_id = p.id AND gs.user_id = ?
        JOIN project_groups g ON g.id = gs.group_id
+      WHERE p.hidden = 0
       ORDER BY p.status ASC, p.academic_year DESC, p.name ASC`,
     [userId]
   );
 }
 
-export async function create(db, { name, description, academicYear, rankingVisible }) {
+export async function create(db, { name, description, academicYear, rankingVisible, hidden }) {
   const result = await db.query(
-    'INSERT INTO projects (name, description, academic_year, ranking_visible) VALUES (?, ?, ?, ?)',
-    [name, description || null, academicYear, rankingVisible ? 1 : 0]
+    'INSERT INTO projects (name, description, academic_year, ranking_visible, hidden) VALUES (?, ?, ?, ?, ?)',
+    [name, description || null, academicYear, rankingVisible ? 1 : 0, hidden ? 1 : 0]
   );
   return result.insertId;
 }
 
-// rankingVisible left undefined keeps the current setting.
-export async function update(db, id, { name, description, academicYear, rankingVisible }) {
+// rankingVisible and hidden left undefined keep the current setting.
+export async function update(db, id, { name, description, academicYear, rankingVisible, hidden }) {
+  const flag = (value) => (value === undefined ? null : value ? 1 : 0);
   await db.query(
-    'UPDATE projects SET name = ?, description = ?, academic_year = ?, ranking_visible = COALESCE(?, ranking_visible) WHERE id = ?',
-    [name, description || null, academicYear, rankingVisible === undefined ? null : rankingVisible ? 1 : 0, id]
+    `UPDATE projects SET name = ?, description = ?, academic_year = ?,
+            ranking_visible = COALESCE(?, ranking_visible), hidden = COALESCE(?, hidden)
+      WHERE id = ?`,
+    [name, description || null, academicYear, flag(rankingVisible), flag(hidden), id]
   );
 }
 

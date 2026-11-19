@@ -252,6 +252,40 @@ test('teamwork badges: staff always, students only when the project shows them',
   assert.equal((await student1.get(url)).status, 403);
 });
 
+test('a hidden project does not exist for its students', async () => {
+  const url = `/api/projects/${s.project.id}`;
+  const project = (await teacher.get(url)).body;
+  assert.equal(project.hidden, false);
+  const body = { name: project.name, academic_year: project.academic_year, description: project.description || '' };
+  const board = (await student1.get(`/api/groups/${s.group0.id}/board`)).body;
+  assert.equal(board.project.hidden, false);
+
+  // Only the project's managers hide it, and the value must be a boolean.
+  assert.equal((await student1.put(url, { ...body, hidden: true })).status, 403);
+  assert.equal((await teacher.put(url, { ...body, hidden: 'yes' })).status, 400);
+  assert.equal((await teacher.put(url, { ...body, hidden: true })).body.hidden, true);
+  // Saving the project without the field keeps it hidden.
+  assert.equal((await teacher.put(url, body)).body.hidden, true);
+
+  // Students lose every way in; nothing else about them changes.
+  assert.deepEqual((await student1.get('/api/projects')).body, []);
+  assert.equal((await student1.get(url)).status, 403);
+  assert.equal((await student1.get(`/api/groups/${s.group0.id}/board`)).status, 403);
+  assert.equal((await student1.get(`/api/group-tasks/${board.tasks[0].id}`)).status, 403);
+  assert.equal((await student1.post(`/api/group-tasks/${board.tasks[0].id}/comments`, { content: 'Hola' })).status, 403);
+  assert.equal((await student1.get(`${url}/ranking`)).status, 403);
+
+  // Staff keep working on it and see that it is hidden.
+  assert.equal((await teacher.get('/api/projects')).body.find((p) => p.id === s.project.id).hidden, true);
+  assert.equal((await teacher.get(`/api/groups/${s.group0.id}/board`)).body.project.hidden, true);
+  assert.equal((await s.admin.get(url)).body.groups.length, project.groups.length);
+
+  // Showing it again gives the students everything back.
+  assert.equal((await teacher.put(url, { ...body, hidden: false })).body.hidden, false);
+  assert.deepEqual((await student1.get('/api/projects')).body.map((p) => p.id), [s.project.id]);
+  assert.equal((await student1.get(`/api/groups/${s.group0.id}/board`)).status, 200);
+});
+
 test('groups: numbering, membership rules and validation', async () => {
   // A student cannot be in two groups of the same project.
   const dup = await s.admin.post(`/api/projects/${s.project.id}/groups`, { student_ids: [s.users.s1.id] });
@@ -511,6 +545,8 @@ test('25. project duplication excludes groups, memberships, progress and history
   assert.equal(copy.name, 'Project Two');
   assert.equal(copy.academic_year, '2027-2028');
   assert.equal(copy.status, 'active');
+  // A copy still has to be prepared, so students do not see it yet.
+  assert.equal(copy.hidden, true);
   assert.deepEqual(copy.groups, []);
   assert.deepEqual(copy.teachers, []);
   // Tags are copied into the new project as its own tags (new ids, same names and colors).

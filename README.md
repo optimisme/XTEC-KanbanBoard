@@ -51,6 +51,11 @@ Cada persona veu només els seus projectes: el professorat, els que ha creat o
 on té docència assignada; l'alumnat, aquells on forma part d'un grup. Els
 projectes arxivats queden amagats darrere d'un interruptor.
 
+Un projecte es pot ocultar a l'alumnat mentre es prepara («Oculta el projecte
+a l'alumnat», a «Edita el projecte»): l'alumnat no el veu ni hi pot entrar, i
+el professorat hi veu l'etiqueta «Ocult als estudiants». Els projectes nous i
+les còpies comencen ocults.
+
 ![Llista de projectes d'una professora](assets/02-projectes.png)
 
 ### Matriu de progrés

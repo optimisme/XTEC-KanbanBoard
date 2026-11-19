@@ -164,6 +164,9 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 textarea { resize: vertical; min-height: 96px; }
 textarea.code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86rem; }
 input[type='color'] { width: 48px; height: 36px; padding: 2px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+/* Marks a project that its students cannot see yet. */
+.tag.hidden-tag { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; font-weight: 600; white-space: nowrap; }
+
 /* On/off switch */
 .switch { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 0.92rem; font-weight: 500; cursor: pointer; user-select: none; min-height: 36px; }
 .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }

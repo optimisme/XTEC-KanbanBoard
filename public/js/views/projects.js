@@ -34,6 +34,9 @@ export async function openProjectForm({ project = null, onSaved }) {
   const year = academicYearSelect(project ? project.academic_year : null);
   const description = h('textarea', { rows: '4' });
   description.value = project ? project.description || '' : '';
+  // A new project starts hidden, so students do not see it half prepared.
+  let hidden = project ? project.hidden : true;
+  const hide = toggleSwitch("Oculta el projecte a l'alumnat", hidden, (on) => { hidden = on; });
   let rankingVisible = project ? project.ranking_visible : false;
   const ranking = toggleSwitch("Mostra les insígnies a l'alumnat", rankingVisible, (on) => { rankingVisible = on; });
   const save = h('button', { class: 'btn primary', type: 'submit' }, project ? 'Desa els canvis' : 'Crea el projecte');
@@ -49,6 +52,7 @@ export async function openProjectForm({ project = null, onSaved }) {
             academic_year: year.value,
             description: description.value,
             ranking_visible: rankingVisible,
+            hidden,
           };
           const saved = project
             ? await api.put(`/api/projects/${project.id}`, body)
@@ -61,6 +65,8 @@ export async function openProjectForm({ project = null, onSaved }) {
     field('Nom', name),
     field('Curs acadèmic', year),
     field('Descripció (opcional, admet Markdown)', description),
+    h('div', { class: 'field' }, hide,
+      h('div', { class: 'hint' }, "Mentre està ocult, l'alumnat no veu el projecte ni hi pot entrar. Desactiva-ho quan les tasques i els grups estiguin a punt.")),
     h('div', { class: 'field' }, ranking,
       h('div', { class: 'hint' }, "L'alumnat veu el progrés i les insígnies de treball en equip de tots els grups, sense els noms de les persones dels altres grups. El professorat les veu sempre.")),
     h('div', { class: 'card-actions' }, save)
@@ -75,7 +81,9 @@ function projectCard(project, user) {
     { class: 'card link-card', href },
     h('div', { class: 'card-title' },
       h('h2', {}, project.name),
-      project.status === 'archived' ? h('span', { class: 'tag' }, 'Arxivat') : null),
+      h('span', { class: 'chips' },
+        project.hidden ? h('span', { class: 'tag hidden-tag' }, 'Ocult als estudiants') : null,
+        project.status === 'archived' ? h('span', { class: 'tag' }, 'Arxivat') : null)),
     h('div', { class: 'meta' },
       h('span', {}, `Curs ${project.academic_year}`),
       user.role === 'student'

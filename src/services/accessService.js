@@ -8,7 +8,8 @@ import { conflict, forbidden, notFound } from '../utils/errors.js';
 //   admin   -> every project
 //   teacher -> projects listed in project_teachers (tags never matter); a
 //              teacher manages those projects fully and can create new ones
-//   student -> only their own group inside a project
+//   student -> only their own group inside a project, and nothing at all
+//              while the project is hidden from students
 
 export async function projectAccess(db, user, projectId) {
   const project = await projectRepo.findById(db, projectId);
@@ -19,6 +20,8 @@ export async function projectAccess(db, user, projectId) {
     return { project, level: 'teacher', canManage: true, groupId: null };
   }
   if (user.role === 'student') {
+    // A hidden project is still being prepared: for its students it is not there.
+    if (project.hidden) throw forbidden('Aquest projecte encara no està disponible.');
     const group = await groupRepo.findStudentGroup(db, projectId, user.id);
     if (group) return { project, level: 'student', canManage: false, groupId: group.id };
   }

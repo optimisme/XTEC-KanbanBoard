@@ -47,7 +47,9 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
           h('span', {}, `Curs ${project.academic_year}`),
           h('span', {}, plural(project.task_count, 'tasca', 'tasques')),
           project.teachers.length ? h('span', {}, `Professorat: ${project.teachers.map((t) => t.name).join(', ')}`) : null)),
-      project.status === 'archived' ? h('span', { class: 'tag' }, 'Arxivat · només lectura') : null),
+      h('div', { class: 'actions' },
+        project.hidden ? h('span', { class: 'tag hidden-tag' }, 'Ocult als estudiants') : null,
+        project.status === 'archived' ? h('span', { class: 'tag' }, 'Arxivat · només lectura') : null)),
     h('nav', { class: 'tabs', 'aria-label': 'Seccions del projecte' }, tabs.map(([key, label]) =>
       h('a', { href: `#/projects/${project.id}/${key}`, 'aria-current': key === tab ? 'page' : null }, label))),
     content

@@ -15,14 +15,16 @@ function parseProject(body) {
     name: v.text(body.name, 'nom', { max: 200 }),
     description: v.text(body.description, 'descripció', { max: 10000, required: false }),
     academicYear: v.academicYear(body.academic_year),
-    rankingVisible: rankingVisible(body.ranking_visible),
+    // Two switches, each absent (keep as it is) or a boolean: whether students
+    // see the badges page, and whether the project is hidden from them.
+    rankingVisible: flag(body.ranking_visible, 'insígnies'),
+    hidden: flag(body.hidden, 'ocult'),
   };
 }
 
-// The switch that shows the badges page to students: absent, or a boolean.
-function rankingVisible(value) {
+function flag(value, field) {
   if (value === undefined) return undefined;
-  if (typeof value !== 'boolean') throw badRequest('El camp «insígnies» ha de ser cert o fals.');
+  if (typeof value !== 'boolean') throw badRequest(`El camp «${field}» ha de ser cert o fals.`);
   return value;
 }
 
@@ -35,6 +37,7 @@ export async function list(user) {
   const counts = await projectRepo.counts(db, projects.map((p) => p.id));
   return projects.map((p) => ({
     ...p,
+    hidden: Boolean(p.hidden),
     ranking_visible: Boolean(p.ranking_visible),
     group_count: counts.get(p.id).groups,
     task_count: counts.get(p.id).tasks,
@@ -59,6 +62,7 @@ export async function get(user, projectId, executor = db) {
 
   return {
     ...project,
+    hidden: Boolean(project.hidden),
     ranking_visible: Boolean(project.ranking_visible),
     description_html: renderMarkdown(project.description),
     access: access.level,
@@ -204,6 +208,8 @@ export async function duplicate(user, projectId, body) {
       name: body.name ?? `${source.name} (còpia)`.slice(0, 200),
       description: body.description ?? source.description ?? '',
       academic_year: body.academic_year ?? source.academic_year,
+      // A copy is a project still to be prepared.
+      hidden: true,
     });
     const id = await projectRepo.create(t, data);
     if (user.role === 'teacher') await projectRepo.addTeacher(t, id, user.id);
