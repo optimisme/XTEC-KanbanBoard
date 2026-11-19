@@ -6,6 +6,7 @@ import * as userRepo from '../repositories/userRepository.js';
 import { badRequest, conflict, forbidden, notFound } from '../utils/errors.js';
 import * as v from '../validators/index.js';
 import { assertWritable, groupAccess, managerAccess } from './accessService.js';
+import { clearCollaborators } from './groupTaskService.js';
 import * as projectService from './projectService.js';
 import { assertInstitutionalEmail } from './userService.js';
 
@@ -111,6 +112,12 @@ export async function setStudents(user, groupId, body) {
           eventType: 'responsibility_transferred',
           oldValue: studentId,
         });
+        // No responsible, no collaborators.
+        await clearCollaborators(t, id, user.id);
+      }
+      for (const { group_task_id: id } of await groupTaskRepo.collaborationsOf(t, groupId, studentId)) {
+        await groupTaskRepo.removeCollaborator(t, id, studentId);
+        await groupTaskRepo.addHistory(t, { groupTaskId: id, actorId: user.id, eventType: 'collaborator_removed', oldValue: studentId });
       }
     }
     await groupRepo.removeStudents(t, groupId, toRemove);

@@ -66,9 +66,10 @@ export async function contributions(user, projectId, studentId) {
   const student = await userRepo.findById(db, studentId);
   if (!student || student.role !== 'student') throw notFound("No s'ha trobat l'alumne.");
 
-  const [group, assigned, completed, blockEvents, comments, transfers, activity] = await Promise.all([
+  const [group, assigned, collaborating, completed, blockEvents, comments, transfers, activity] = await Promise.all([
     groupRepo.findStudentGroup(db, projectId, studentId),
     supervisionRepo.assignedTasks(db, projectId, studentId),
+    supervisionRepo.collaboratingTasks(db, projectId, studentId),
     supervisionRepo.completedTasks(db, projectId, studentId),
     supervisionRepo.blockEvents(db, projectId, studentId),
     supervisionRepo.comments(db, projectId, studentId),
@@ -80,6 +81,7 @@ export async function contributions(user, projectId, studentId) {
     student: { id: student.id, name: student.name, email: student.email },
     group: group ? { id: group.id, group_number: group.group_number } : null,
     assigned,
+    collaborating,
     completed,
     block_events: blockEvents,
     comments,

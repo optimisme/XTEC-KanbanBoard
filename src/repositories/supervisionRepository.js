@@ -54,6 +54,21 @@ export function assignedTasks(db, projectId, userId) {
   );
 }
 
+// Tasks on which the student collaborates without being the responsible one.
+export function collaboratingTasks(db, projectId, userId) {
+  return db.query(
+    `SELECT ${TASK_REF}, tc.created_at AS collaborator_since, gt.responsible_user_id, ru.name AS responsible_name
+       FROM task_collaborators tc
+       JOIN group_tasks gt ON gt.id = tc.group_task_id AND gt.project_id = ?
+       JOIN task_definitions td ON td.id = gt.task_id AND td.deleted_at IS NULL
+       JOIN project_groups g ON g.id = gt.group_id
+       LEFT JOIN users ru ON ru.id = gt.responsible_user_id
+      WHERE tc.user_id = ?
+      ORDER BY td.sort_order ASC, td.id ASC`,
+    [projectId, userId]
+  );
+}
+
 // Tasks whose current completion was performed by the student.
 export function completedTasks(db, projectId, userId) {
   return db.query(

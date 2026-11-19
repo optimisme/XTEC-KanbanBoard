@@ -30,6 +30,7 @@ export async function createForGroup(db, groupId, projectId) {
 }
 
 export async function removeForGroup(db, groupId) {
+  await db.query('DELETE FROM task_collaborators WHERE group_id = ?', [groupId]);
   await db.query('DELETE FROM group_tasks WHERE group_id = ?', [groupId]);
 }
 
@@ -77,6 +78,44 @@ export function listAssignedTo(db, groupId, userId) {
     groupId,
     userId,
   ]);
+}
+
+// ---- Collaborators --------------------------------------------------------
+
+// Collaborators of several group tasks at once: Map(groupTaskId -> [{ id, name }]).
+export async function collaboratorsFor(db, groupTaskIds) {
+  const map = new Map(groupTaskIds.map((id) => [id, []]));
+  if (groupTaskIds.length === 0) return map;
+  const rows = await db.query(
+    `SELECT tc.group_task_id, u.id, u.name
+       FROM task_collaborators tc JOIN users u ON u.id = tc.user_id
+      WHERE tc.group_task_id IN (?) ORDER BY u.name ASC`,
+    [groupTaskIds]
+  );
+  for (const { group_task_id: groupTaskId, ...person } of rows) map.get(groupTaskId).push(person);
+  return map;
+}
+
+export async function addCollaborator(db, { groupTaskId, groupId, userId, addedBy }) {
+  await db.query('INSERT INTO task_collaborators (group_task_id, group_id, user_id, added_by) VALUES (?, ?, ?, ?)', [
+    groupTaskId,
+    groupId,
+    userId,
+    addedBy,
+  ]);
+}
+
+export async function removeCollaborator(db, groupTaskId, userId) {
+  const result = await db.query('DELETE FROM task_collaborators WHERE group_task_id = ? AND user_id = ?', [
+    groupTaskId,
+    userId,
+  ]);
+  return result.affectedRows > 0;
+}
+
+// The tasks of a group on which a student collaborates.
+export function collaborationsOf(db, groupId, userId) {
+  return db.query('SELECT group_task_id FROM task_collaborators WHERE group_id = ? AND user_id = ?', [groupId, userId]);
 }
 
 // ---- Comments -------------------------------------------------------------
@@ -140,16 +179,16 @@ export async function addHistory(db, { groupTaskId, actorId, eventType, oldValue
   );
 }
 
-// For responsibility events old_value / new_value hold user ids; their names
+// For responsibility and collaborator events old_value / new_value hold user ids; their names
 // are resolved here so clients do not need a user directory.
 export const HISTORY_SELECT = `
   SELECT h.id, h.group_task_id, h.actor_id, au.name AS actor_name, au.role AS actor_role,
          h.event_type, h.old_value, h.new_value, ou.name AS old_user_name, nu.name AS new_user_name, h.created_at
     FROM task_history h
     JOIN users au ON au.id = h.actor_id
-    LEFT JOIN users ou ON h.event_type IN ('auto_assigned', 'responsibility_transferred')
+    LEFT JOIN users ou ON h.event_type IN ('auto_assigned', 'responsibility_transferred', 'collaborator_added', 'collaborator_removed')
                       AND ou.id = CAST(h.old_value AS UNSIGNED)
-    LEFT JOIN users nu ON h.event_type IN ('auto_assigned', 'responsibility_transferred')
+    LEFT JOIN users nu ON h.event_type IN ('auto_assigned', 'responsibility_transferred', 'collaborator_added', 'collaborator_removed')
                       AND nu.id = CAST(h.new_value AS UNSIGNED)`;
 
 export function history(db, groupTaskId) {

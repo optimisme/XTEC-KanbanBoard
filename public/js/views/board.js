@@ -62,7 +62,11 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
       h('div', { class: 'task-footer' },
         h('div', { class: 'who' },
           task.responsible
-            ? [avatar(task.responsible.name), h('span', { title: `Responsable: ${task.responsible.name}` }, task.responsible.name)]
+            ? [avatar(task.responsible.name), h('span', { title: `Responsable: ${task.responsible.name}` }, task.responsible.name),
+               task.collaborators.length > 0
+                 ? h('span', { class: 'tag', title: `Col·laboren: ${task.collaborators.map((c) => c.name).join(', ')}` },
+                     `+${task.collaborators.length}`, h('span', { class: 'sr-only' }, ' col·laboradors'))
+                 : null]
             : h('span', {}, 'Sense responsable')),
         h('div', { class: 'counts' },
           h('span', { title: 'Comentaris' }, icon('comment'), String(task.comment_count), h('span', { class: 'sr-only' }, ' comentaris')))),

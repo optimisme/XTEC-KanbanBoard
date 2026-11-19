@@ -77,6 +77,8 @@ router.post('/projects/:projectId/import', projects.importTasks);
 router.get('/group-tasks/:groupTaskId', groupTasks.detail);
 router.post('/group-tasks/:groupTaskId/status', groupTasks.changeStatus);
 router.post('/group-tasks/:groupTaskId/responsible', groupTasks.transferResponsibility);
+router.post('/group-tasks/:groupTaskId/collaborators', groupTasks.addCollaborator);
+router.delete('/group-tasks/:groupTaskId/collaborators/:userId', groupTasks.removeCollaborator);
 router.post('/group-tasks/:groupTaskId/comments', groupTasks.addComment);
 router.get('/group-tasks/:groupTaskId/history', groupTasks.history);
 

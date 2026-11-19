@@ -44,6 +44,7 @@ created at the same time cannot miss each other.
 | A group's tasks belong to the group's project | Composite foreign keys through `project_id` |
 | The responsible student is a member of the group | `FOREIGN KEY (group_id, responsible_user_id)` → `group_students` |
 | At most one responsible student | A single nullable column |
+| A collaborator is a member of the task's own group | `task_collaborators (group_task_id, group_id)` → `group_tasks`, `(group_id, user_id)` → `group_students` |
 | A task only uses tags of its own project | `task_tags (tag_id, project_id)` → `project_tags (id, project_id)` |
 | Tag names are unique inside a project | `UNIQUE (project_id, name)` on `project_tags` |
 | At most one open block per task | Unique key over a generated column that is `1` while `unblocked_at IS NULL` |
@@ -109,6 +110,11 @@ targets, both for drag-and-drop and for the accessible "Mou a…" control.
 Transactions retry automatically on InnoDB deadlocks.
 
 ## Responsibility versus contribution
+
+A task has one responsible student and, optionally, collaborators
+(`task_collaborators`). The service keeps one rule the schema cannot express:
+a task without a responsible student has no collaborators, so they are
+cleared whenever responsibility becomes empty.
 
 Who is responsible (`group_tasks.responsible_user_id`) and who did something
 (`task_history.actor_id`, `completed_by`, comment authors,

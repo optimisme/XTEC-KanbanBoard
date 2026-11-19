@@ -79,6 +79,8 @@ export const EVENT_LABELS = {
   completed: 'ha finalitzat la tasca',
   reopened: 'ha reobert la tasca',
   comment_added: 'ha afegit un comentari',
+  collaborator_added: 'ha afegit un col·laborador',
+  collaborator_removed: 'ha tret un col·laborador',
 };
 
 export function statusBadge(status) {

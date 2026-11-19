@@ -420,6 +420,10 @@ td.actions .btn + .btn { margin-left: 6px; }
 .detail-side .stack { display: grid; gap: 6px; }
 .detail-side .btn { width: 100%; justify-content: flex-start; }
 .person { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.person.collaborator { margin-bottom: 4px; }
+.person.collaborator span:not(.avatar) { flex: 1; min-width: 0; }
+.detail-side .person.collaborator .btn { width: auto; }
+.task-footer .who .tag { flex: none; padding: 0 6px; }
 .subtabs { display: flex; flex: none; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
 .subtabs button {
   padding: 7px 12px; border: 0; background: none; font: inherit; font-size: 0.9rem; color: var(--text-muted);

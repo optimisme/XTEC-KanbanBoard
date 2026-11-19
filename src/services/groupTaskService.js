@@ -35,7 +35,9 @@ function historyEvent(from, to) {
   return 'state_changed';
 }
 
-function presentCard(row, tags, access, user) {
+function presentCard(row, tags, collaborators, access, user) {
+  const writable = access.project.status !== 'archived';
+  const isResponsible = row.responsible_user_id !== null && row.responsible_user_id === user.id;
   return {
     id: row.id,
     group_id: row.group_id,
@@ -45,6 +47,7 @@ function presentCard(row, tags, access, user) {
     tags,
     status: row.status,
     responsible: row.responsible_user_id ? { id: row.responsible_user_id, name: row.responsible_name } : null,
+    collaborators,
     assigned_at: row.assigned_at,
     completed_at: row.completed_at,
     completed_by: row.completed_by ? { id: row.completed_by, name: row.completed_by_name } : null,
@@ -53,9 +56,9 @@ function presentCard(row, tags, access, user) {
     blocked_at: row.blocked_at,
     comment_count: row.comment_count,
     allowed_transitions: allowedTransitions(access, row.status),
-    can_transfer:
-      access.project.status !== 'archived' &&
-      (access.canManage || (row.responsible_user_id !== null && row.responsible_user_id === user.id)),
+    can_transfer: writable && (access.canManage || isResponsible),
+    // Collaborators only exist on a task that has a responsible student.
+    can_edit_collaborators: writable && row.responsible_user_id !== null && (access.canManage || isResponsible),
   };
 }
 
@@ -63,13 +66,14 @@ export async function board(user, groupId) {
   const access = await groupAccess(db, user, groupId);
   const [rows, members] = await Promise.all([groupTaskRepo.board(db, groupId), groupRepo.members(db, groupId)]);
   const tags = await tagRepo.mapForTasks(db, rows.map((r) => r.task_id));
+  const collaborators = await groupTaskRepo.collaboratorsFor(db, rows.map((r) => r.id));
   return {
     project: { id: access.project.id, name: access.project.name, status: access.project.status },
     group: access.group,
     access: access.level,
     can_manage: access.canManage,
     members,
-    tasks: rows.map((row) => presentCard(row, tags.get(row.task_id), access, user)),
+    tasks: rows.map((row) => presentCard(row, tags.get(row.task_id), collaborators.get(row.id), access, user)),
   };
 }
 
@@ -78,9 +82,10 @@ export async function detail(user, groupTaskId) {
   const row = await groupTaskRepo.findDetailed(db, groupTaskId);
   if (row.deleted_at) throw notFound("No s'ha trobat la tasca.");
 
-  const [definition, tags, members, comments, blockEvents, history] = await Promise.all([
+  const [definition, tags, collaborators, members, comments, blockEvents, history] = await Promise.all([
     taskRepo.findById(db, row.task_id),
     tagRepo.mapForTasks(db, [row.task_id]),
+    groupTaskRepo.collaboratorsFor(db, [groupTaskId]),
     groupRepo.members(db, row.group_id),
     groupTaskRepo.comments(db, groupTaskId),
     groupTaskRepo.blockEvents(db, groupTaskId),
@@ -88,7 +93,7 @@ export async function detail(user, groupTaskId) {
   ]);
 
   return {
-    ...presentCard(row, tags.get(row.task_id), access, user),
+    ...presentCard(row, tags.get(row.task_id), collaborators.get(groupTaskId), access, user),
     project: { id: access.project.id, name: access.project.name, status: access.project.status },
     group: { id: access.group.id, group_number: access.group.group_number },
     access: access.level,
@@ -210,6 +215,66 @@ export async function transferResponsibility(user, groupTaskId, body) {
       oldValue: current,
       newValue: newUserId,
     });
+
+    // Collaborators stay with the task when the responsible changes. The new
+    // responsible stops being a collaborator, and a task left without a
+    // responsible keeps no collaborators.
+    if (newUserId === null) await clearCollaborators(t, groupTaskId, user.id);
+    else await dropCollaborator(t, groupTaskId, newUserId, user.id);
+  });
+  return detail(user, groupTaskId);
+}
+
+// ---- Collaborators ----------------------------------------------------------
+
+async function dropCollaborator(t, groupTaskId, userId, actorId) {
+  if (await groupTaskRepo.removeCollaborator(t, groupTaskId, userId)) {
+    await groupTaskRepo.addHistory(t, { groupTaskId, actorId, eventType: 'collaborator_removed', oldValue: userId });
+  }
+}
+
+export async function clearCollaborators(t, groupTaskId, actorId) {
+  const current = (await groupTaskRepo.collaboratorsFor(t, [groupTaskId])).get(groupTaskId);
+  for (const person of current) await dropCollaborator(t, groupTaskId, person.id, actorId);
+}
+
+// Only the responsible student decides who collaborates on their task
+// (teachers and administrators can correct it). A task without a responsible
+// student cannot have collaborators.
+async function lockForCollaborators(t, user, groupTaskId) {
+  const { groupTask, access } = await lockForWrite(t, user, groupTaskId);
+  if (!access.canManage && groupTask.responsible_user_id !== user.id) {
+    throw forbidden('Només la persona responsable pot gestionar els col·laboradors de la tasca.');
+  }
+  if (groupTask.responsible_user_id === null) {
+    throw conflict('Una tasca sense responsable no pot tenir col·laboradors.', 'task_unassigned');
+  }
+  return groupTask;
+}
+
+export async function addCollaborator(user, groupTaskId, body) {
+  const userId = v.id(body.user_id, 'col·laborador');
+  await db.tx(async (t) => {
+    const groupTask = await lockForCollaborators(t, user, groupTaskId);
+    if (userId === groupTask.responsible_user_id) throw badRequest('La persona responsable no pot ser també col·laboradora.');
+    if (!(await groupRepo.isMember(t, groupTask.group_id, userId))) {
+      throw badRequest('Els col·laboradors han de ser membres del grup.');
+    }
+    const current = (await groupTaskRepo.collaboratorsFor(t, [groupTaskId])).get(groupTaskId);
+    if (current.some((person) => person.id === userId)) throw conflict('Aquesta persona ja col·labora en la tasca.');
+    await groupTaskRepo.addCollaborator(t, { groupTaskId, groupId: groupTask.group_id, userId, addedBy: user.id });
+    await groupTaskRepo.addHistory(t, { groupTaskId, actorId: user.id, eventType: 'collaborator_added', newValue: userId });
+  });
+  return detail(user, groupTaskId);
+}
+
+export async function removeCollaborator(user, groupTaskId, userId) {
+  await db.tx(async (t) => {
+    await lockForCollaborators(t, user, groupTaskId);
+    if (!(await groupTaskRepo.removeCollaborator(t, groupTaskId, userId))) {
+      throw notFound('Aquesta persona no col·labora en la tasca.');
+    }
+    await groupTaskRepo.addHistory(t, { groupTaskId, actorId: user.id, eventType: 'collaborator_removed', oldValue: userId });
   });
   return detail(user, groupTaskId);
 }

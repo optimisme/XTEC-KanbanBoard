@@ -342,6 +342,7 @@ Proxmox container.
 | Move tasks along the board, block and unblock, complete | ✔ | ✔ | ✔ |
 | Comment on tasks | ✔ | ✔ | ✔ |
 | Transfer one's own tasks to a group member | | | ✔ |
+| Add or remove collaborators on a task one is responsible for | ✔ | ✔ | ✔ |
 | Configure the group's GitHub repository URL | ✔ | | ✔ |
 
 A teacher who creates (or duplicates) a project is assigned to it
@@ -424,6 +425,12 @@ Teachers and administrators can also correct a task to any other state.
   change. Teachers and administrators never become responsible this way.
 - A task has **at most one** responsible student, who stays responsible
   through blocking, completion and reopening.
+- **Collaborators**: the responsible student can add other members of the
+  group who work on the task with them, and remove them. Nobody else can
+  (teachers and administrators can correct the list). A task without a
+  responsible student has no collaborators. When responsibility is handed
+  over, collaborators stay; if the new responsible was a collaborator they
+  leave that list, and a task that is left unassigned loses its collaborators.
 - **Transfers**: the responsible student can hand the task to another member
   of the group. Teachers and administrators can reassign or unassign.
 - **Completion**: any member of the group can complete a task. The person who
@@ -498,7 +505,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
 | Shared tasks | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |
 | Import | `GET /api/projects/:id/import/template`, `POST …/import/preview`, `POST …/import` |
-| Group tasks | `GET /api/group-tasks/:id`, `POST …/status`, `POST …/responsible`, `POST …/comments`, `GET …/history` |
+| Group tasks | `GET /api/group-tasks/:id`, `POST …/status`, `POST …/responsible`, `POST …/collaborators`, `DELETE …/collaborators/:userId`, `POST …/comments`, `GET …/history` |
 | Supervision | `GET /api/projects/:id/matrix`, `GET /api/blocked-tasks`, `GET /api/projects/:id/students/:userId/contributions` |
 
 ## Repository structure

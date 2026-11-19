@@ -59,6 +59,7 @@ export async function update(db, id, { name, description, academicYear }) {
 export async function removeCompletely(db, id) {
   const byGroupTask = (table) =>
     `DELETE x FROM ${table} x JOIN group_tasks gt ON gt.id = x.group_task_id WHERE gt.project_id = ?`;
+  await db.query(byGroupTask('task_collaborators'), [id]);
   await db.query(byGroupTask('task_history'), [id]);
   await db.query(byGroupTask('task_block_events'), [id]);
   await db.query(byGroupTask('task_comments'), [id]);

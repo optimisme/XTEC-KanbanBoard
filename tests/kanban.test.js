@@ -253,6 +253,73 @@ test('supervision: progress matrix and student contributions', async () => {
   assert.equal((await student1.get(`/api/projects/${s.project.id}/students/${s.users.s2.id}/contributions`)).status, 403);
 });
 
+test('collaborators: only the responsible adds them, and only on an assigned task', async () => {
+  const collab = (client, id, userId) => client.post(`/api/group-tasks/${id}/collaborators`, { user_id: userId });
+  const uncollab = (client, id, userId) => client.del(`/api/group-tasks/${id}/collaborators/${userId}`);
+  const names = (res) => res.body.collaborators.map((c) => c.name);
+
+  // Task C is pending and has no responsible: no collaborators allowed, not even by a teacher.
+  const unassigned = (await student1.get(`/api/group-tasks/${gtC}`)).body;
+  assert.equal(unassigned.responsible, null);
+  assert.equal(unassigned.can_edit_collaborators, false);
+  assert.equal((await collab(teacher, gtC, s.users.s2.id)).body.error.code, 'task_unassigned');
+  assert.equal((await collab(student1, gtC, s.users.s2.id)).status, 403);
+
+  // Student 1 starts it and becomes responsible; only they manage the list.
+  await setStatus(student1, gtC, 'in_progress');
+  assert.equal((await collab(student2, gtC, s.users.s2.id)).status, 403);
+  const added = await collab(student1, gtC, s.users.s2.id);
+  assert.equal(added.status, 201);
+  assert.deepEqual(names(added), ['Student 2']);
+  assert.equal(added.body.can_edit_collaborators, true);
+  const event = added.body.history.at(-1);
+  assert.equal(event.event_type, 'collaborator_added');
+  assert.equal(event.new_user_name, 'Student 2');
+
+  // Rules: not the responsible, not outsiders, not twice.
+  assert.equal((await collab(student1, gtC, s.users.s1.id)).status, 400);
+  assert.equal((await collab(student1, gtC, s.users.s3.id)).status, 400);
+  assert.equal((await collab(student1, gtC, s.users.s2.id)).status, 409);
+  await assert.rejects(
+    db.query('INSERT INTO task_collaborators (group_task_id, group_id, user_id, added_by) VALUES (?, ?, ?, ?)', [
+      gtC, s.group0.id, s.users.s3.id, s.users.s1.id,
+    ]),
+    { code: 'ER_NO_REFERENCED_ROW_2' }
+  );
+
+  // The board card and the collaborator's own view show it; the collaborator cannot edit the list.
+  assert.deepEqual((await groupTaskOf(student2, s.group0.id, s.tasks[2].id)).collaborators.map((c) => c.id), [s.users.s2.id]);
+  assert.equal((await student2.get(`/api/group-tasks/${gtC}`)).body.can_edit_collaborators, false);
+  assert.equal((await uncollab(student2, gtC, s.users.s2.id)).status, 403);
+  const contrib = (await teacher.get(`/api/projects/${s.project.id}/students/${s.users.s2.id}/contributions`)).body;
+  assert.deepEqual(contrib.collaborating.map((c) => c.group_task_id), [gtC]);
+  assert.ok(!contrib.assigned.some((a) => a.group_task_id === gtC));
+
+  // Removing works for the responsible; removing someone not on the list is a 404.
+  assert.deepEqual(names(await uncollab(student1, gtC, s.users.s2.id)), []);
+  assert.equal((await uncollab(student1, gtC, s.users.s2.id)).status, 404);
+  await collab(student1, gtC, s.users.s2.id);
+
+  // When the responsible hands the task to a collaborator, that person stops being a collaborator.
+  const handed = await student1.post(`/api/group-tasks/${gtC}/responsible`, { user_id: s.users.s2.id });
+  assert.equal(handed.body.responsible.id, s.users.s2.id);
+  assert.deepEqual(names(handed), []);
+  // The former responsible is not added automatically; the new one decides.
+  assert.equal((await collab(student1, gtC, s.users.s1.id)).status, 403);
+  assert.deepEqual(names(await collab(student2, gtC, s.users.s1.id)), ['Student 1']);
+
+  // A task left without a responsible loses its collaborators.
+  const cleared = await teacher.post(`/api/group-tasks/${gtC}/responsible`, { user_id: null });
+  assert.equal(cleared.body.responsible, null);
+  assert.deepEqual(names(cleared), []);
+  assert.ok(cleared.body.history.some((h) => h.event_type === 'collaborator_removed' && h.old_user_name === 'Student 1'));
+
+  // Leave two collaborations in place for the next test.
+  await teacher.post(`/api/group-tasks/${gtC}/responsible`, { user_id: s.users.s2.id });
+  assert.equal((await collab(teacher, gtC, s.users.s1.id)).status, 201); // a teacher can correct the list
+  assert.equal((await collab(student1, gtA, s.users.s2.id)).status, 201); // Task A: responsible Student 1
+});
+
 test('removing a student from a group keeps history and clears responsibility', async () => {
   const before = (await student1.get(`/api/group-tasks/${gtA}`)).body;
   assert.equal(before.responsible.id, s.users.s1.id);
@@ -264,6 +331,13 @@ test('removing a student from a group keeps history and clears responsibility', 
   assert.equal(after.responsible, null);
   assert.ok(after.history.length > before.history.length);
   assert.ok(after.history.some((h) => h.actor_id === s.users.s1.id));
+  // Task A lost its responsible, so it lost its collaborator too; on Task C the
+  // student who left is no longer a collaborator.
+  assert.deepEqual(after.collaborators, []);
+  const taskC = (await student2.get(`/api/group-tasks/${gtC}`)).body;
+  assert.equal(taskC.responsible.id, s.users.s2.id);
+  assert.deepEqual(taskC.collaborators, []);
+  assert.equal((await db.query('SELECT COUNT(*) AS n FROM task_collaborators'))[0].n, 0);
 
   // Groups with activity cannot be deleted; untouched ones can.
   assert.equal((await s.admin.del(`/api/groups/${s.group0.id}`)).status, 409);

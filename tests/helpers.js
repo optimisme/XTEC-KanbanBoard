@@ -6,7 +6,7 @@ import { migrate } from '../src/db/migrate.js';
 import { closePool, db, pool } from '../src/db/pool.js';
 
 const TABLES = [
-  'task_history', 'task_block_events', 'task_comments', 'group_tasks',
+  'task_collaborators', 'task_history', 'task_block_events', 'task_comments', 'group_tasks',
   'task_versions', 'task_tags', 'task_definitions', 'group_students', 'project_groups',
   'project_tags', 'project_teachers', 'projects', 'users', 'sessions',
 ];

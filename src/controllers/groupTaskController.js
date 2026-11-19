@@ -19,6 +19,14 @@ export async function transferResponsibility(req, res) {
   res.json(await groupTaskService.transferResponsibility(req.user, groupTaskId(req), req.body));
 }
 
+export async function addCollaborator(req, res) {
+  res.status(201).json(await groupTaskService.addCollaborator(req.user, groupTaskId(req), req.body));
+}
+
+export async function removeCollaborator(req, res) {
+  res.json(await groupTaskService.removeCollaborator(req.user, groupTaskId(req), v.id(req.params.userId, 'col·laborador')));
+}
+
 export async function addComment(req, res) {
   res.status(201).json(await groupTaskService.addComment(req.user, groupTaskId(req), req.body));
 }

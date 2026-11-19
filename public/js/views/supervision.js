@@ -91,6 +91,13 @@ export async function renderContributions(view, [projectId, studentId]) {
           t.status === 'completed' && t.completed_by_name ? ` · finalitzada per ${t.completed_by_name}` : ''))),
       'No és responsable de cap tasca.'),
 
+    section('Tasques on col·labora', data.collaborating.map((t) =>
+      h('li', {},
+        h('div', { class: 'head' }, taskLink(t), statusBadge(t.status)),
+        h('div', { class: 'muted' }, `Responsable: ${t.responsible_name || 'ningú'} · col·labora des del ${formatDateTime(t.collaborator_since)}`))),
+      'No col·labora en cap tasca.',
+      "Tasques d'una altra persona on la responsable l'ha afegit com a col·laborador/a."),
+
     section('Tasques que ha finalitzat', data.completed.map((t) =>
       h('li', {},
         h('div', { class: 'head' }, taskLink(t), h('span', { class: 'when' }, formatDateTime(t.completed_at))),

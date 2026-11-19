@@ -38,6 +38,9 @@ export async function changeTaskStatus(task, status) {
 // The detail line of a history event: a state change shown as two status
 // badges, or who the responsibility moved from and to.
 function historyDetail(event) {
+  if (event.event_type === 'collaborator_added' || event.event_type === 'collaborator_removed') {
+    return h('span', { class: 'muted' }, event.new_user_name || event.old_user_name || 'usuari eliminat');
+  }
   if (event.event_type === 'responsibility_transferred' || event.event_type === 'auto_assigned') {
     const from = event.old_user_name || (event.old_value ? 'usuari eliminat' : 'ningú');
     const to = event.new_user_name || (event.new_value ? 'usuari eliminat' : 'ningú');
@@ -114,6 +117,43 @@ export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly
       transfer = h('div', { class: 'stack' }, select, button);
     }
 
+    // People who work on the task with the responsible student. Only the
+    // responsible (or a teacher who is editing) changes the list, and a task
+    // without a responsible has none.
+    function collaboratorsSection() {
+      if (!task.responsible) return null;
+      const canEdit = task.can_edit_collaborators && !readOnly;
+      if (task.collaborators.length === 0 && !canEdit) return null;
+
+      const rows = task.collaborators.map((person) => {
+        const remove = h('button', { class: 'btn ghost small', type: 'button', 'aria-label': `Treu ${person.name}` }, 'Treu');
+        remove.addEventListener('click', () => run(remove, async () =>
+          update(await api.del(`/api/group-tasks/${task.id}/collaborators/${person.id}`))));
+        return h('div', { class: 'person collaborator' }, avatar(person.name), h('span', {}, person.name), canEdit ? remove : null);
+      });
+
+      let add = null;
+      const taken = new Set([task.responsible.id, ...task.collaborators.map((c) => c.id)]);
+      const candidates = task.members.filter((m) => !taken.has(m.id));
+      if (canEdit && candidates.length > 0) {
+        const select = h('select', { 'aria-label': 'Nou col·laborador' },
+          h('option', { value: '' }, 'Tria una persona…'),
+          candidates.map((m) => h('option', { value: String(m.id) }, m.name)));
+        const button = h('button', { class: 'btn', type: 'button' }, 'Afegeix col·laborador');
+        button.addEventListener('click', () => {
+          if (!select.value) return select.focus();
+          return run(button, async () =>
+            update(await api.post(`/api/group-tasks/${task.id}/collaborators`, { user_id: Number(select.value) })));
+        });
+        add = h('div', { class: 'stack' }, select, button);
+      }
+
+      return h('section', {},
+        h('h3', {}, 'Col·laboradors'),
+        rows.length ? rows : h('p', { class: 'muted' }, 'Ningú més hi treballa.'),
+        add);
+    }
+
     return h('aside', { class: 'detail-side' },
       h('section', {},
         h('h3', {}, 'Estat'),
@@ -131,6 +171,7 @@ export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly
           ? h('div', { class: 'person' }, avatar(task.responsible.name), h('span', {}, task.responsible.name))
           : h('p', { class: 'muted' }, readOnly ? 'Sense responsable.' : 'Sense responsable. Qui comenci la tasca en serà responsable.'),
         transfer),
+      collaboratorsSection(),
       task.status === 'completed' && task.completed_by
         ? h('section', {},
             h('h3', {}, 'Finalització'),
