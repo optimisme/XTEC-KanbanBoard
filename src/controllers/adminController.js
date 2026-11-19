@@ -19,6 +19,14 @@ export async function lookupTeacher(req, res) {
   res.json(await userService.lookupPerson(req.body, 'teacher'));
 }
 
+export async function suggestStudents(req, res) {
+  res.json(await userService.suggestPeople(req.query, 'student'));
+}
+
+export async function suggestTeachers(req, res) {
+  res.json(await userService.suggestPeople(req.query, 'teacher'));
+}
+
 export async function setPassword(req, res) {
   res.json(await userService.setOwnPassword(req.user, req.body));
 }

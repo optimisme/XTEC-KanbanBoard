@@ -29,6 +29,8 @@ export async function session(req, res) {
     user: req.user ? authService.publicUser(req.user) : null,
     csrf_token: csrfToken(req),
     app_name: config.appName,
+    // Domains whose accounts are accepted, shown next to the email fields.
+    email_domains: config.allowedEmailDomains,
     dev_auth: config.devAuthEnabled,
     oidc_configured: config.oidc.configured,
     oidc_provider: config.oidc.provider,

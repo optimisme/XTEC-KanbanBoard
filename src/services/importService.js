@@ -148,14 +148,20 @@ export async function importTasks(user, projectId, body) {
   return listTasks(user, projectId);
 }
 
-// A ready-to-edit example that uses the project's own tag names.
+// A ready-to-edit example: one line of instructions (text before the first
+// task is never imported) and tasks with one tag, two tags and no tags, using
+// the project's own tag names where it has some.
 export async function template(user, projectId) {
   await managerAccess(db, user, projectId);
   const names = (await tagRepo.listForProject(db, projectId)).map((tag) => tag.name);
   const first = names[0] || 'Programació';
-  const both = names.length > 1 ? `${names[0]}, ${names[1]}` : `${first}, Bases de dades`;
+  const second = names[1] || 'Bases de dades';
 
   return `# Tasques del projecte
+
+Cada títol de nivell 2 és una tasca. La línia **Tags:** és opcional: etiquetes separades per comes.
+
+---
 
 ## Crear el repositori de GitHub
 
@@ -170,19 +176,14 @@ Creeu el repositori de GitHub del grup.
 
 ## Dissenyar la base de dades
 
-**Tags:** ${both}
+**Tags:** ${second}, ${first}
 
 Creeu l'esquema relacional de la base de dades.
-
-![Diagrama de la base de dades](https://example.com/diagram.png)
-
-- Diagrama entitat-relació complet.
-- Claus primàries i foranes definides.
 
 ---
 
 ## Presentar el projecte
 
-Aquesta tasca no té etiquetes: la línia **Tags:** és opcional.
+Una tasca sense etiquetes.
 `;
 }

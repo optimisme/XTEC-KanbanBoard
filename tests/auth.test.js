@@ -279,6 +279,7 @@ test('frontend files are served under fingerprinted, long-cached URLs', async ()
 test('the application name comes from the configuration', async () => {
   const session = await request(app).get('/api/session');
   assert.equal(session.body.app_name, 'Kanban de proves');
+  assert.deepEqual(session.body.email_domains, ['xtec.cat', 'iesesteveterradas.cat']);
   const page = await request(app).get('/');
   assert.match(page.text, /<title>Kanban de proves<\/title>/);
 });

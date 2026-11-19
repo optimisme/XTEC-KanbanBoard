@@ -6,6 +6,7 @@ import {
   STATUS_LABELS, tagChip, tagChips,
   STATUSES, statusBadge, toast,
 } from '../ui.js';
+import { emailSuggestions } from '../people.js';
 import { openProjectForm } from './projects.js';
 import { openDefinition, openImport, openTaskEditor } from './taskEditor.js';
 import { openTaskModal } from './taskModal.js';
@@ -23,6 +24,8 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
   const tab = tabs.some(([key]) => key === tabParam) ? tabParam : 'groups';
   const content = h('div', {});
   const reload = () => ctx.rerender();
+  // "@xtec.cat, @iesesteveterradas.cat": the accounts the sign-in accepts.
+  const domainsText = ctx.emailDomains.map((domain) => `@${domain}`).join(', ');
 
   append(view, 
     h('div', { class: 'page-header' },
@@ -129,8 +132,9 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         : `El grup nou serà el Grup ${project.groups.length ? Math.max(...project.groups.map((g) => g.group_number)) + 1 : 0} i rebrà totes les tasques del projecte com a pendents.`),
       h('div', { class: 'field' }, h('label', {}, 'Alumnat del grup'), listEl),
       h('div', { class: 'field' },
-        h('label', {}, 'Afegeix una persona pel seu correu institucional'),
-        h('div', { class: 'inline-form' }, email, add)),
+        h('label', {}, `Afegeix una persona amb ${domainsText}`),
+        h('div', { class: 'inline-form' }, email, add),
+        emailSuggestions(email, 'students')),
       nameField,
       message);
     const dialog = modal({ title: group ? `Alumnat del Grup ${group.group_number}` : 'Nou grup', body, footer: [save] });
@@ -354,8 +358,9 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
           });
         },
       },
-        h('label', {}, 'Afegeix professorat pel seu correu institucional'),
-        h('div', { class: 'inline-form' }, email, add));
+        h('label', {}, `Afegeix professorat amb ${domainsText}`),
+        h('div', { class: 'inline-form' }, email, add),
+        emailSuggestions(email, 'teachers'));
     }
 
     // Tags of the project: rename, recolor, delete, add.

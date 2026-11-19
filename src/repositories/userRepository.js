@@ -75,6 +75,18 @@ export async function update(db, id, fields) {
   await db.query(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, params);
 }
 
+// Active accounts of one role whose name or email contains the text typed so
+// far. LIKE wildcards in the text are escaped, so it is matched literally.
+export function suggest(db, { role, text, limit }) {
+  const pattern = `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  return db.query(
+    `SELECT id, name, email FROM users
+      WHERE role = ? AND status = 'active' AND (email LIKE ? OR name LIKE ?)
+      ORDER BY name ASC, id ASC LIMIT ?`,
+    [role, pattern, pattern, limit]
+  );
+}
+
 export async function countActiveAdmins(db) {
   const rows = await db.query("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND status = 'active'");
   return rows[0].n;

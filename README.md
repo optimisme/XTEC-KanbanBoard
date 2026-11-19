@@ -429,11 +429,21 @@ shows the format:
 
 **Tags:** Programming
 
-### Description
-
 Create the group's GitHub repository.
 
-- The repository exists.
+---
+
+## Design Database
+
+**Tags:** Databases, Programming
+
+Create the relational database schema.
+
+---
+
+## Present the Project
+
+A task without tags.
 ```
 
 - Each `##` heading is a task; document order becomes the global order.

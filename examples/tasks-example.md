@@ -1,10 +1,12 @@
 # Project Tasks
 
+Every level-two heading is a task. The **Tags:** line is optional: tags separated by commas.
+
+---
+
 ## Create GitHub Repository
 
 **Tags:** Programming
-
-### Description
 
 Create the group's GitHub repository.
 
@@ -17,11 +19,10 @@ Create the group's GitHub repository.
 
 **Tags:** Databases, Programming
 
-### Description
-
 Create the relational database schema.
 
-![Database diagram](https://example.com/diagram.png)
+---
 
-- Complete entity-relationship diagram.
-- Primary and foreign keys are defined.
+## Present the Project
+
+A task without tags.

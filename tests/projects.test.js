@@ -344,6 +344,16 @@ Create the relational database schema.
   const template = await s.admin.get(`/api/projects/${empty.id}/import/template`);
   assert.equal(template.status, 200);
   assert.match(template.text, /\*\*Tags:\*\* Databases/);
+  // The template is itself a valid import: its instruction line is skipped and
+  // it shows tasks with one tag, two tags and no tags.
+  const fresh = (await s.admin.post('/api/projects', { name: 'Template check', academic_year: '2026-2027' })).body;
+  const ownTemplate = (await s.admin.get(`/api/projects/${fresh.id}/import/template`)).text;
+  const templatePreview = (await s.admin.post(`/api/projects/${fresh.id}/import/preview`, { markdown: ownTemplate })).body;
+  assert.equal(templatePreview.valid, true);
+  assert.deepEqual(templatePreview.errors, []);
+  assert.deepEqual(templatePreview.tasks.map((t) => t.tags.map((tag) => tag.name)), [['Programació'], ['Bases de dades', 'Programació'], []]);
+  assert.ok(templatePreview.tasks[0].tags[0].is_new);
+  assert.ok(templatePreview.tasks.every((t) => t.description.length > 0));
 });
 
 test('25. project duplication excludes groups, memberships, progress and history', async () => {
@@ -561,4 +571,30 @@ test('teachers add other teachers to their project by email', async () => {
   assert.equal((await otherTeacher.put(`/api/projects/${projectId}/teachers`, { teacher_ids: [s.users.otherTeacher.id] })).status, 403);
   assert.equal((await s.admin.put(`/api/projects/${projectId}/teachers`, { teacher_ids: [s.users.teacher.id] })).status, 200);
   assert.equal((await otherTeacher.get(`/api/projects/${projectId}`)).status, 403);
+});
+
+test('known emails are suggested to staff while adding students or teachers', async () => {
+  const suggest = async (client, people, q) => client.get(`/api/${people}/suggest?q=${encodeURIComponent(q)}`);
+
+  // By part of the email or of the name, active accounts of the right role only.
+  const students = (await suggest(teacher, 'students', 's1@')).body;
+  assert.deepEqual(students.map((p) => p.email), ['s1@xtec.cat']);
+  assert.deepEqual(Object.keys(students[0]).sort(), ['email', 'id', 'name']);
+  assert.ok((await suggest(teacher, 'students', 'student')).body.length >= 4);
+  assert.ok((await suggest(teacher, 'students', 'student')).body.length <= 8);
+  assert.ok((await suggest(teacher, 'students', 'student')).body.every((p) => /student/i.test(p.name + p.email)));
+  assert.deepEqual((await suggest(teacher, 'teachers', 'teacher b')).body.map((p) => p.email), ['other@xtec.cat']);
+  assert.deepEqual((await suggest(teacher, 'students', 'teacher')).body, []);
+
+  // Nothing for fewer than two characters, and wildcards are taken literally.
+  assert.deepEqual((await suggest(teacher, 'students', 's')).body, []);
+  assert.deepEqual((await suggest(teacher, 'students', '%%')).body, []);
+  assert.deepEqual((await suggest(teacher, 'students', '__')).body, []);
+
+  // Disabled accounts are not offered; students cannot list anyone.
+  await s.admin.patch(`/api/users/${s.users.s4.id}`, { status: 'disabled' });
+  assert.deepEqual((await suggest(teacher, 'students', 's4@')).body, []);
+  await s.admin.patch(`/api/users/${s.users.s4.id}`, { status: 'active' });
+  assert.equal((await suggest(student1, 'students', 's2')).status, 403);
+  assert.equal((await suggest(student1, 'teachers', 'te')).status, 403);
 });

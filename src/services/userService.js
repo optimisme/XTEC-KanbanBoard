@@ -47,6 +47,14 @@ export async function lookupPerson(body, role) {
   return { email, found: true, id: user.id, name: user.name, problem };
 }
 
+// Known people to offer while a teacher or administrator types an email.
+// Nothing is returned until two characters have been typed.
+export async function suggestPeople(query, role) {
+  const text = typeof query.q === 'string' ? query.q.trim().slice(0, 100) : '';
+  if (text.length < 2) return [];
+  return userRepo.suggest(db, { role, text, limit: 8 });
+}
+
 // Adds a person by email before they have ever signed in. The account is
 // active from the start; on their first institutional login the verified
 // email links it to their identity, so no approval step is needed.

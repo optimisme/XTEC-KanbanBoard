@@ -87,7 +87,7 @@ export async function openDefinition(taskId, { canManage, writable, onChanged })
 
 // Initial Markdown import: paste or load a file, preview, then import.
 export function openImport({ project, onDone }) {
-  const text = h('textarea', { class: 'code', rows: '14', required: true, placeholder: '## Títol de la tasca\n\n**Tags:** …' });
+  const text = h('textarea', { class: 'code', rows: '14', required: true, placeholder: '## Crear el repositori\n\n**Tags:** Programació, Bases de dades\n\nDescripció de la tasca, en Markdown.\n\n---\n\n## Presentar el projecte\n\nUna tasca sense etiquetes.' });
   const file = h('input', { type: 'file', accept: '.md,.markdown,.txt,text/markdown,text/plain', 'aria-label': 'Fitxer Markdown' });
   file.addEventListener('change', async () => {
     if (file.files[0]) text.value = await file.files[0].text();

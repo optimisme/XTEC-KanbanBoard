@@ -179,7 +179,7 @@ async function renderRoute() {
   append(main, h('p', { class: 'loading' }, "S'està carregant…"));
   try {
     const view = h('div', {});
-    await route.render(view, match.slice(1), { user, rerender: renderRoute });
+    await route.render(view, match.slice(1), { user, rerender: renderRoute, emailDomains: state.session.email_domains });
     if (token !== renderToken) return undefined; // A newer navigation won.
     append(clear(main), view);
   } catch (err) {

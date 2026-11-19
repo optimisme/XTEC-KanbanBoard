@@ -29,6 +29,8 @@ router.post('/users/:id/reject', adminOnly, admin.rejectUser);
 // Used by teachers and administrators when adding people by email.
 router.post('/students/lookup', staffOnly, admin.lookupStudent);
 router.post('/teachers/lookup', staffOnly, admin.lookupTeacher);
+router.get('/students/suggest', staffOnly, admin.suggestStudents);
+router.get('/teachers/suggest', staffOnly, admin.suggestTeachers);
 
 // Project tags
 router.get('/projects/:projectId/tags', projects.listTags);
