@@ -314,9 +314,13 @@ fi
 pm2 save
 APP_STOPPED=0
 
-# Configure PM2 to restart the app after a machine reboot
+# Configure PM2 to restart the app after a machine reboot. Once the pm2
+# service is enabled there is nothing left to do: "pm2 save" above already
+# stored the current process list, which is what the service restores.
 if command -v systemctl >/dev/null 2>&1; then
-  if sudo -n true 2>/dev/null; then
+  if systemctl is-enabled "pm2-$REMOTE_USER" >/dev/null 2>&1; then
+    echo "✔️  L'arrencada automàtica després d'un reinici ja està configurada."
+  elif sudo -n true 2>/dev/null; then
     sudo env PATH="$PATH" pm2 startup systemd -u "$REMOTE_USER" --hp "$HOME"
     pm2 save
     echo "✔️  PM2 configurat per iniciar-se automàticament després d'un reinici."
