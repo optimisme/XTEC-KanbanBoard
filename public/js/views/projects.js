@@ -35,7 +35,7 @@ export async function openProjectForm({ project = null, onSaved }) {
   const description = h('textarea', { rows: '4' });
   description.value = project ? project.description || '' : '';
   let rankingVisible = project ? project.ranking_visible : false;
-  const ranking = toggleSwitch("Mostra la classificació a l'alumnat", rankingVisible, (on) => { rankingVisible = on; });
+  const ranking = toggleSwitch("Mostra les insígnies a l'alumnat", rankingVisible, (on) => { rankingVisible = on; });
   const save = h('button', { class: 'btn primary', type: 'submit' }, project ? 'Desa els canvis' : 'Crea el projecte');
 
   const form = h(
@@ -62,7 +62,7 @@ export async function openProjectForm({ project = null, onSaved }) {
     field('Curs acadèmic', year),
     field('Descripció (opcional, admet Markdown)', description),
     h('div', { class: 'field' }, ranking,
-      h('div', { class: 'hint' }, "L'alumnat veu el progrés de tots els grups i la mitjana de la classe, sense els noms de les persones dels altres grups. El professorat la veu sempre.")),
+      h('div', { class: 'hint' }, "L'alumnat veu el progrés i les insígnies de treball en equip de tots els grups, sense els noms de les persones dels altres grups. El professorat les veu sempre.")),
     h('div', { class: 'card-actions' }, save)
   );
   const dialog = modal({ title: project ? 'Edita el projecte' : 'Nou projecte', body: form });

@@ -72,7 +72,7 @@ export async function board(user, groupId) {
       id: access.project.id,
       name: access.project.name,
       status: access.project.status,
-      // Whether students get the link to the ranking of the groups.
+      // Whether students get the link to the groups' teamwork badges.
       ranking_visible: Boolean(access.project.ranking_visible),
       // Students read the project description from their board.
       description_html: renderMarkdown(access.project.description),

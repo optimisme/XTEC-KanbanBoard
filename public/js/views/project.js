@@ -21,7 +21,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
 
   // Students work only on their group's board; the project page is for staff.
   if (!project.can_manage) {
-    // ... except for the ranking, when the project shows it to them.
+    // ... except for the badges page, when the project shows it to them.
     if (tabParam === 'ranking' && project.ranking_visible) return renderStudentRanking(view, project);
     window.location.replace(`#/groups/${project.my_group_id}`);
     return;
@@ -29,7 +29,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
 
   // The progress matrix comes first and is what opens by default.
   const tabs = [
-    ['matrix', 'Matriu de progrés'], ['ranking', 'Classificació'], ['description', 'Descripció'], ['groups', 'Grups'],
+    ['matrix', 'Matriu de progrés'], ['ranking', 'Insígnies'], ['description', 'Descripció'], ['groups', 'Grups'],
     ['tasks', 'Tasques'], ['students', 'Alumnat'], ['settings', 'Configuració'],
   ];
   const tab = tabs.some(([key]) => key === tabParam) ? tabParam : 'matrix';

@@ -178,7 +178,7 @@ test('administrators delete accounts that have no recorded work', async () => {
   assert.equal((await s.admin.del(`/api/users/${c.id}`)).status, 409);
 });
 
-test('ranking: staff always, students only when the project shows it', async () => {
+test('teamwork badges: staff always, students only when the project shows them', async () => {
   const url = `/api/projects/${s.project.id}/ranking`;
   const project = (await teacher.get(`/api/projects/${s.project.id}`)).body;
   assert.equal(project.ranking_visible, false);
@@ -198,28 +198,49 @@ test('ranking: staff always, students only when the project shows it', async () 
   assert.equal((await teacher.put(`/api/projects/${s.project.id}`, body)).body.ranking_visible, true);
   assert.equal((await student1.get(`/api/groups/${s.group0.id}/board`)).body.project.ranking_visible, true);
 
-  // One finished task puts group 0 first.
+  // Group 0 has students 1 and 2. Student 1 finishes one task alone.
   const board = (await student1.get(`/api/groups/${s.group0.id}/board`)).body;
-  const pending = board.tasks.find((t) => t.status === 'pending');
-  assert.equal((await student1.post(`/api/group-tasks/${pending.id}/status`, { status: 'in_progress' })).status, 200);
-  assert.equal((await student1.post(`/api/group-tasks/${pending.id}/status`, { status: 'completed' })).status, 200);
+  // The last pending tasks, so the tests below find the first ones untouched.
+  const [second, first] = board.tasks.filter((t) => t.status === 'pending').slice(-2);
+  const finish = async (client, task) => {
+    assert.equal((await client.post(`/api/group-tasks/${task.id}/status`, { status: 'in_progress' })).status, 200);
+    assert.equal((await client.post(`/api/group-tasks/${task.id}/status`, { status: 'completed' })).status, 200);
+  };
+  await finish(student1, first);
 
   const staff = (await teacher.get(url)).body;
-  assert.equal(staff.groups.length, (await teacher.get(`/api/projects/${s.project.id}`)).body.groups.length);
-  assert.equal(staff.groups[0].id, s.group0.id);
-  assert.equal(staff.groups[0].position, 1);
-  assert.ok(staff.groups[0].percent > 0);
-  assert.ok(staff.groups.every((g) => g.id !== null && g.students === undefined));
-  assert.equal(staff.average_percent, Math.round(staff.groups.reduce((sum, g) => sum + g.percent, 0) / staff.groups.length));
-  // Groups with exactly the same progress share a position.
-  const idle = staff.groups.filter((g) => g.completed === 0 && g.in_progress === 0);
-  assert.ok(idle.length >= 2 && idle.every((g) => g.position === idle[0].position));
+  // No ranking: groups come in their own order, every one with the same badges.
+  assert.deepEqual(staff.groups.map((g) => g.group_number), [...staff.groups.map((g) => g.group_number)].sort((a, b) => a - b));
+  assert.ok(staff.groups.every((g) => g.id !== null && g.students === undefined && g.position === undefined));
+  assert.ok(staff.groups.every((g) => g.badges.map((b) => b.key).join() === 'everyone,balanced,versatile,autonomous'));
+  assert.equal(staff.class_percent, Math.round(staff.groups.reduce((sum, g) => sum + g.percent, 0) / staff.groups.length));
 
-  // Students get the same order, but only their own group can be opened.
+  const badge = (data, groupId, key) => data.groups.find((g) => g.id === groupId).badges.find((b) => b.key === key);
+  // Only one of the two members has worked so far.
+  for (const key of ['everyone', 'autonomous', 'balanced']) assert.equal(badge(staff, s.group0.id, key).earned, false, key);
+  assert.equal(badge(staff, s.group0.id, 'everyone').progress, '1 de 2 persones');
+  assert.equal(badge(staff, s.group0.id, 'autonomous').progress, '1 de 2 persones');
+  assert.equal(badge(staff, s.group0.id, 'balanced').progress, '1 de 4 tasques finalitzades');
+  // A group of one person cannot earn the badges that need a team.
+  const solo = badge(staff, s.group1.id, 'balanced');
+  assert.equal(solo.unavailable, 'team');
+  assert.equal(solo.earned, false);
+  assert.equal(staff.badges_total, staff.groups.flatMap((g) => g.badges).filter((b) => !b.unavailable).length);
+
+  // Student 2 also finishes a task alone: everyone works, each on their own.
+  const student2 = await login(s.users.s2.email);
+  await finish(student2, second);
+  const later = (await teacher.get(url)).body;
+  for (const key of ['everyone', 'autonomous']) assert.equal(badge(later, s.group0.id, key).earned, true, key);
+  assert.equal(later.badges_earned, staff.badges_earned + 2);
+  // Two tasks each are still needed before the share of work counts as fair.
+  assert.equal(badge(later, s.group0.id, 'balanced').earned, false);
+
+  // Students get the same page, but only their own group can be opened.
   const mine = (await student1.get(url)).body;
   assert.deepEqual(mine.groups.map((g) => g.group_number), staff.groups.map((g) => g.group_number));
   assert.deepEqual(mine.groups.filter((g) => g.id !== null).map((g) => g.id), [s.group0.id]);
-  assert.ok(mine.groups.find((g) => g.is_mine).id === s.group0.id);
+  assert.equal(mine.groups.find((g) => g.is_mine).id, s.group0.id);
   assert.equal(mine.can_manage, false);
 
   assert.equal((await teacher.put(`/api/projects/${s.project.id}`, { ...body, ranking_visible: false })).body.ranking_visible, false);

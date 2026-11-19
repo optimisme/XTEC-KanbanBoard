@@ -113,18 +113,6 @@ export async function progressByProject(db, projectId) {
   return map;
 }
 
-// Map(groupId -> time of the group's latest completed task).
-export async function lastCompletionByProject(db, projectId) {
-  const rows = await db.query(
-    `SELECT gt.group_id, MAX(gt.completed_at) AS last_completed_at
-       FROM group_tasks gt JOIN task_definitions td ON td.id = gt.task_id
-      WHERE gt.project_id = ? AND td.deleted_at IS NULL AND gt.status = 'completed'
-      GROUP BY gt.group_id`,
-    [projectId]
-  );
-  return new Map(rows.map((row) => [row.group_id, row.last_completed_at]));
-}
-
 // True when anything has ever happened on the group's board.
 export async function hasActivity(db, groupId) {
   const rows = await db.query(

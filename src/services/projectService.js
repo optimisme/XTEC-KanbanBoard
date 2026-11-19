@@ -19,10 +19,10 @@ function parseProject(body) {
   };
 }
 
-// The switch that shows the ranking to students: absent, or a boolean.
+// The switch that shows the badges page to students: absent, or a boolean.
 function rankingVisible(value) {
   if (value === undefined) return undefined;
-  if (typeof value !== 'boolean') throw badRequest('El camp «classificació» ha de ser cert o fals.');
+  if (typeof value !== 'boolean') throw badRequest('El camp «insígnies» ha de ser cert o fals.');
   return value;
 }
 

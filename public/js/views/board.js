@@ -210,7 +210,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
           ? toggleSwitch("Permet l'edició", editing, (on) => { editing = on; draw(); })
           : null,
         !board.can_manage && board.project.ranking_visible
-          ? h('a', { class: 'btn', href: `#/projects/${board.project.id}/ranking` }, '🏆 Classificació')
+          ? h('a', { class: 'btn', href: `#/projects/${board.project.id}/ranking` }, '🤝 Insígnies')
           : null,
         board.can_manage ? null : h('button', { class: 'btn', type: 'button', onClick: showDescription }, 'Descripció'))),
     infoEl,
