@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { createScenario, db, groupTaskOf, login, setup, teardown } from './helpers.js';
+import { createScenario, createUser, db, groupTaskOf, login, setup, teardown } from './helpers.js';
 
 let s;
 let teacher;
@@ -135,6 +135,97 @@ test('groups: an optional short name next to the number', async () => {
   assert.equal(groupOf(await teacher.put(`/api/groups/${s.group2.id}/students`, { ...members, name: '' })).name, null);
 });
 
+test('administrators delete accounts that have no recorded work', async () => {
+  const a = await createUser({ email: 'del.a@xtec.cat', name: 'Del A' });
+  const b = await createUser({ email: 'del.b@xtec.cat', name: 'Del B' });
+  const c = await createUser({ email: 'del.c@xtec.cat', name: 'Del C' });
+  const me = (await s.admin.get('/api/session')).body.user;
+
+  // Only administrators, never themselves, and only existing accounts.
+  assert.equal((await teacher.del(`/api/users/${c.id}`)).status, 403);
+  assert.equal((await s.admin.del(`/api/users/${me.id}`)).status, 409);
+  assert.equal((await s.admin.del('/api/users/999999')).status, 404);
+
+  // A group is never left empty.
+  const project = (await s.admin.post(`/api/projects/${s.project.id}/groups`, { student_ids: [a.id] })).body;
+  const group = project.groups.find((g) => g.students.some((m) => m.id === a.id));
+  const alone = await s.admin.del(`/api/users/${a.id}`);
+  assert.equal(alone.status, 409);
+  assert.match(alone.body.error.message, /única persona/);
+
+  // Without recorded work the account goes, together with its membership and sessions.
+  await s.admin.put(`/api/groups/${group.id}/students`, { student_ids: [a.id, b.id] });
+  const bClient = await login(b.email);
+  assert.equal((await bClient.get('/api/projects')).status, 200);
+  assert.equal((await s.admin.del(`/api/users/${b.id}`)).status, 204);
+  assert.equal((await bClient.get('/api/projects')).status, 401);
+  assert.ok(!(await s.admin.get('/api/users')).body.some((u) => u.id === b.id));
+  const after = (await s.admin.get(`/api/projects/${s.project.id}`)).body.groups.find((g) => g.id === group.id);
+  assert.deepEqual(after.students.map((m) => m.id), [a.id]);
+
+  // Recorded work keeps the account: it can only be deactivated.
+  await s.admin.put(`/api/groups/${group.id}/students`, { student_ids: [a.id, c.id] });
+  const aClient = await login(a.email);
+  const board = (await aClient.get(`/api/groups/${group.id}/board`)).body;
+  assert.equal((await aClient.post(`/api/group-tasks/${board.tasks[0].id}/status`, { status: 'in_progress' })).status, 200);
+  const busy = await s.admin.del(`/api/users/${a.id}`);
+  assert.equal(busy.status, 409);
+  assert.match(busy.body.error.message, /activitat/);
+  assert.equal((await aClient.get('/api/projects')).status, 200);
+  assert.ok((await s.admin.get('/api/users')).body.some((u) => u.id === a.id));
+  // Somebody who only received a task from another person is kept too.
+  assert.equal((await aClient.post(`/api/group-tasks/${board.tasks[0].id}/responsible`, { user_id: c.id })).status, 200);
+  assert.equal((await s.admin.del(`/api/users/${c.id}`)).status, 409);
+});
+
+test('ranking: staff always, students only when the project shows it', async () => {
+  const url = `/api/projects/${s.project.id}/ranking`;
+  const project = (await teacher.get(`/api/projects/${s.project.id}`)).body;
+  assert.equal(project.ranking_visible, false);
+  const body = { name: project.name, academic_year: project.academic_year, description: project.description || '' };
+
+  // Hidden by default: staff see it, students and outsiders do not.
+  assert.equal((await teacher.get(url)).status, 200);
+  assert.equal((await student1.get(url)).status, 403);
+  assert.equal((await otherTeacher.get(url)).status, 403);
+  assert.equal((await student1.get(`/api/groups/${s.group0.id}/board`)).body.project.ranking_visible, false);
+
+  // The switch belongs to the project's managers and must be a boolean.
+  assert.equal((await student1.put(`/api/projects/${s.project.id}`, { ...body, ranking_visible: true })).status, 403);
+  assert.equal((await teacher.put(`/api/projects/${s.project.id}`, { ...body, ranking_visible: 'yes' })).status, 400);
+  assert.equal((await teacher.put(`/api/projects/${s.project.id}`, { ...body, ranking_visible: true })).body.ranking_visible, true);
+  // Saving the project without the field keeps the setting.
+  assert.equal((await teacher.put(`/api/projects/${s.project.id}`, body)).body.ranking_visible, true);
+  assert.equal((await student1.get(`/api/groups/${s.group0.id}/board`)).body.project.ranking_visible, true);
+
+  // One finished task puts group 0 first.
+  const board = (await student1.get(`/api/groups/${s.group0.id}/board`)).body;
+  const pending = board.tasks.find((t) => t.status === 'pending');
+  assert.equal((await student1.post(`/api/group-tasks/${pending.id}/status`, { status: 'in_progress' })).status, 200);
+  assert.equal((await student1.post(`/api/group-tasks/${pending.id}/status`, { status: 'completed' })).status, 200);
+
+  const staff = (await teacher.get(url)).body;
+  assert.equal(staff.groups.length, (await teacher.get(`/api/projects/${s.project.id}`)).body.groups.length);
+  assert.equal(staff.groups[0].id, s.group0.id);
+  assert.equal(staff.groups[0].position, 1);
+  assert.ok(staff.groups[0].percent > 0);
+  assert.ok(staff.groups.every((g) => g.id !== null && g.students === undefined));
+  assert.equal(staff.average_percent, Math.round(staff.groups.reduce((sum, g) => sum + g.percent, 0) / staff.groups.length));
+  // Groups with exactly the same progress share a position.
+  const idle = staff.groups.filter((g) => g.completed === 0 && g.in_progress === 0);
+  assert.ok(idle.length >= 2 && idle.every((g) => g.position === idle[0].position));
+
+  // Students get the same order, but only their own group can be opened.
+  const mine = (await student1.get(url)).body;
+  assert.deepEqual(mine.groups.map((g) => g.group_number), staff.groups.map((g) => g.group_number));
+  assert.deepEqual(mine.groups.filter((g) => g.id !== null).map((g) => g.id), [s.group0.id]);
+  assert.ok(mine.groups.find((g) => g.is_mine).id === s.group0.id);
+  assert.equal(mine.can_manage, false);
+
+  assert.equal((await teacher.put(`/api/projects/${s.project.id}`, { ...body, ranking_visible: false })).body.ranking_visible, false);
+  assert.equal((await student1.get(url)).status, 403);
+});
+
 test('groups: numbering, membership rules and validation', async () => {
   // A student cannot be in two groups of the same project.
   const dup = await s.admin.post(`/api/projects/${s.project.id}/groups`, { student_ids: [s.users.s1.id] });
@@ -160,6 +251,17 @@ test('groups: numbering, membership rules and validation', async () => {
   assert.equal((await student3.put(`/api/groups/${s.group0.id}/github`, { github_url: 'https://github.com/a/b' })).status, 403);
   assert.equal((await teacher.put(`/api/groups/${s.group0.id}/github`, { github_url: 'https://github.com/a/b' })).status, 403);
   assert.equal((await teacher.get(`/api/groups/${s.group0.id}/board`)).body.group.github_url, 'https://github.com/org/repo');
+  // Web URL: same people, any http(s) address, and it can be emptied.
+  const web = (url, client = student1) => client.put(`/api/groups/${s.group0.id}/web`, { web_url: url });
+  assert.equal((await teacher.get(`/api/groups/${s.group0.id}/board`)).body.group.web_url, null);
+  assert.equal((await web(' https://botiga.example.cat/inici ')).body.web_url, 'https://botiga.example.cat/inici');
+  for (const bad of ['javascript:alert(1)', 'ftp://example.cat', 'botiga', 'https://user:pass@example.cat', `https://example.cat/${'x'.repeat(500)}`]) {
+    assert.equal((await web(bad)).status, 400, bad);
+  }
+  assert.equal((await web('https://a.example', student3)).status, 403);
+  assert.equal((await web('https://a.example', teacher)).status, 403);
+  assert.equal((await teacher.get(`/api/groups/${s.group0.id}/board`)).body.group.web_url, 'https://botiga.example.cat/inici');
+  assert.equal((await web('')).body.web_url, null);
 });
 
 test('10. modifying a shared task does not reset group progress', async () => {

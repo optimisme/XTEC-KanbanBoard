@@ -15,7 +15,15 @@ function parseProject(body) {
     name: v.text(body.name, 'nom', { max: 200 }),
     description: v.text(body.description, 'descripció', { max: 10000, required: false }),
     academicYear: v.academicYear(body.academic_year),
+    rankingVisible: rankingVisible(body.ranking_visible),
   };
+}
+
+// The switch that shows the ranking to students: absent, or a boolean.
+function rankingVisible(value) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') throw badRequest('El camp «classificació» ha de ser cert o fals.');
+  return value;
 }
 
 export async function list(user) {
@@ -27,6 +35,7 @@ export async function list(user) {
   const counts = await projectRepo.counts(db, projects.map((p) => p.id));
   return projects.map((p) => ({
     ...p,
+    ranking_visible: Boolean(p.ranking_visible),
     group_count: counts.get(p.id).groups,
     task_count: counts.get(p.id).tasks,
   }));
@@ -50,6 +59,7 @@ export async function get(user, projectId, executor = db) {
 
   return {
     ...project,
+    ranking_visible: Boolean(project.ranking_visible),
     description_html: renderMarkdown(project.description),
     access: access.level,
     can_manage: access.canManage,

@@ -1,4 +1,4 @@
-const COLUMNS = 'p.id, p.name, p.description, p.academic_year, p.status, p.created_at, p.updated_at';
+const COLUMNS = 'p.id, p.name, p.description, p.academic_year, p.status, p.ranking_visible, p.created_at, p.updated_at';
 
 export async function findById(db, id) {
   const rows = await db.query(`SELECT ${COLUMNS} FROM projects p WHERE p.id = ?`, [id]);
@@ -36,22 +36,20 @@ export function listForStudent(db, userId) {
   );
 }
 
-export async function create(db, { name, description, academicYear }) {
-  const result = await db.query('INSERT INTO projects (name, description, academic_year) VALUES (?, ?, ?)', [
-    name,
-    description || null,
-    academicYear,
-  ]);
+export async function create(db, { name, description, academicYear, rankingVisible }) {
+  const result = await db.query(
+    'INSERT INTO projects (name, description, academic_year, ranking_visible) VALUES (?, ?, ?, ?)',
+    [name, description || null, academicYear, rankingVisible ? 1 : 0]
+  );
   return result.insertId;
 }
 
-export async function update(db, id, { name, description, academicYear }) {
-  await db.query('UPDATE projects SET name = ?, description = ?, academic_year = ? WHERE id = ?', [
-    name,
-    description || null,
-    academicYear,
-    id,
-  ]);
+// rankingVisible left undefined keeps the current setting.
+export async function update(db, id, { name, description, academicYear, rankingVisible }) {
+  await db.query(
+    'UPDATE projects SET name = ?, description = ?, academic_year = ?, ranking_visible = COALESCE(?, ranking_visible) WHERE id = ?',
+    [name, description || null, academicYear, rankingVisible === undefined ? null : rankingVisible ? 1 : 0, id]
+  );
 }
 
 // Permanently removes a project and everything that belongs to it, children

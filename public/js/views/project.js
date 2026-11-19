@@ -9,6 +9,7 @@ import {
 import { emailSuggestions } from '../people.js';
 import { academicYearSelect, openProjectForm } from './projects.js';
 import { openDefinition, openImport, openTaskEditor } from './taskEditor.js';
+import { rankingContent, renderStudentRanking } from './ranking.js';
 import { openTaskModal } from './taskModal.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -20,13 +21,15 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
 
   // Students work only on their group's board; the project page is for staff.
   if (!project.can_manage) {
+    // ... except for the ranking, when the project shows it to them.
+    if (tabParam === 'ranking' && project.ranking_visible) return renderStudentRanking(view, project);
     window.location.replace(`#/groups/${project.my_group_id}`);
     return;
   }
 
   // The progress matrix comes first and is what opens by default.
   const tabs = [
-    ['matrix', 'Matriu de progrés'], ['description', 'Descripció'], ['groups', 'Grups'],
+    ['matrix', 'Matriu de progrés'], ['ranking', 'Classificació'], ['description', 'Descripció'], ['groups', 'Grups'],
     ['tasks', 'Tasques'], ['students', 'Alumnat'], ['settings', 'Configuració'],
   ];
   const tab = tabs.some(([key]) => key === tabParam) ? tabParam : 'matrix';
@@ -50,7 +53,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
     content
   );
 
-  const renderers = { description: descriptionTab, groups: groupsTab, tasks: tasksTab, matrix: matrixTab, students: studentsTab, settings: settingsTab };
+  const renderers = { ranking: async () => { append(content, await rankingContent(project.id)); }, description: descriptionTab, groups: groupsTab, tasks: tasksTab, matrix: matrixTab, students: studentsTab, settings: settingsTab };
   await renderers[tab]();
 
   // ---- Description -------------------------------------------------------------
@@ -195,7 +198,10 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
           h('div', { class: 'meta' },
             group.github_url
               ? h('a', { href: group.github_url, target: '_blank', rel: 'noopener noreferrer' }, group.github_url.replace('https://github.com/', 'github.com/'))
-              : h('span', {}, 'Sense repositori de GitHub'))),
+              : h('span', {}, 'Sense repositori de GitHub'),
+            group.web_url
+              ? h('a', { href: group.web_url, target: '_blank', rel: 'noopener noreferrer' }, group.web_url.replace(/^https?:\/\//, '').replace(/\/$/, ''))
+              : null)),
         h('div', { class: 'group-progress' }, total > 0
           ? [
               h('div', { class: 'progress', role: 'img', 'aria-label': STATUSES.map((s) => `${STATUS_LABELS[s]}: ${group.progress[s]}`).join(', ') },

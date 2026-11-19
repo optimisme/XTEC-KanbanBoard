@@ -1,4 +1,4 @@
-const COLUMNS = 'g.id, g.project_id, g.group_number, g.name, g.github_url, g.created_at, g.updated_at';
+const COLUMNS = 'g.id, g.project_id, g.group_number, g.name, g.github_url, g.web_url, g.created_at, g.updated_at';
 
 export async function findById(db, id) {
   const rows = await db.query(`SELECT ${COLUMNS} FROM project_groups g WHERE g.id = ?`, [id]);
@@ -38,6 +38,10 @@ export async function setName(db, groupId, name) {
 
 export async function setGithubUrl(db, groupId, url) {
   await db.query('UPDATE project_groups SET github_url = ? WHERE id = ?', [url, groupId]);
+}
+
+export async function setWebUrl(db, groupId, url) {
+  await db.query('UPDATE project_groups SET web_url = ? WHERE id = ?', [url, groupId]);
 }
 
 export function members(db, groupId) {
@@ -107,6 +111,18 @@ export async function progressByProject(db, projectId) {
     map.get(row.group_id)[row.status] = row.n;
   }
   return map;
+}
+
+// Map(groupId -> time of the group's latest completed task).
+export async function lastCompletionByProject(db, projectId) {
+  const rows = await db.query(
+    `SELECT gt.group_id, MAX(gt.completed_at) AS last_completed_at
+       FROM group_tasks gt JOIN task_definitions td ON td.id = gt.task_id
+      WHERE gt.project_id = ? AND td.deleted_at IS NULL AND gt.status = 'completed'
+      GROUP BY gt.group_id`,
+    [projectId]
+  );
+  return new Map(rows.map((row) => [row.group_id, row.last_completed_at]));
 }
 
 // True when anything has ever happened on the group's board.

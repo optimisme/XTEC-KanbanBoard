@@ -68,3 +68,19 @@ export function githubRepoUrl(value) {
   }
   return cleaned;
 }
+
+// Returns a normalized http(s) address, or null to clear it.
+export function webUrl(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  const cleaned = String(value).trim();
+  let url = null;
+  try {
+    url = new URL(cleaned);
+  } catch {
+    url = null;
+  }
+  if (!url || cleaned.length > 500 || !['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw badRequest("La URL ha de ser una adreça web (https://exemple.cat).");
+  }
+  return url.href;
+}

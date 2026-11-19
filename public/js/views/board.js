@@ -146,6 +146,23 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
       });
     });
 
+    const webButton = h('button', { class: 'btn small', type: 'button' }, group.web_url ? 'Canvia' : 'Configura la web');
+    webButton.addEventListener('click', async () => {
+      const url = await promptDialog({
+        title: 'Web del grup',
+        label: 'URL de la web',
+        hint: "L'adreça on es pot veure la feina publicada, per exemple https://exemple.cat. Deixa-ho buit per treure-la.",
+        value: group.web_url || '',
+        required: false,
+      });
+      if (url === null) return;
+      await run(webButton, async () => {
+        await api.put(`/api/groups/${group.id}/web`, { web_url: url });
+        toast('Web actualitzada.');
+        await refresh();
+      });
+    });
+
     append(clear(infoEl), 
       h('span', {}, h('strong', {}, 'Membres: '), board.members.map((m) => m.name).join(', ') || '—'),
       h('span', {},
@@ -154,7 +171,14 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
           ? h('a', { href: group.github_url, target: '_blank', rel: 'noopener noreferrer' }, group.github_url.replace('https://github.com/', ''))
           : 'sense repositori',
         ' ',
-        canSetGithub ? githubButton : null)
+        canSetGithub ? githubButton : null),
+      h('span', {},
+        h('strong', {}, 'Web: '),
+        group.web_url
+          ? h('a', { href: group.web_url, target: '_blank', rel: 'noopener noreferrer' }, group.web_url.replace(/^https?:\/\//, '').replace(/\/$/, ''))
+          : 'sense web',
+        ' ',
+        canSetGithub ? webButton : null)
     );
     append(clear(boardEl), STATUSES.map(column));
   }
@@ -184,6 +208,9 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
         board.project.status === 'archived' ? h('span', { class: 'tag' }, 'Projecte arxivat · només lectura') : null,
         board.can_manage && board.project.status === 'active'
           ? toggleSwitch("Permet l'edició", editing, (on) => { editing = on; draw(); })
+          : null,
+        !board.can_manage && board.project.ranking_visible
+          ? h('a', { class: 'btn', href: `#/projects/${board.project.id}/ranking` }, '🏆 Classificació')
           : null,
         board.can_manage ? null : h('button', { class: 'btn', type: 'button', onClick: showDescription }, 'Descripció'))),
     infoEl,

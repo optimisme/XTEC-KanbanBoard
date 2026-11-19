@@ -101,13 +101,27 @@ export async function renderUsers(view, params, { user: me }) {
                 });
               });
             }
+            const remove = h('button', { class: 'btn small danger', type: 'button', disabled: self }, 'Elimina');
+            remove.addEventListener('click', async () => {
+              const ok = await confirmDialog({
+                title: `Elimina ${u.name}`,
+                message: `S'eliminarà el compte ${u.email} i se'l traurà dels grups i projectes on és. Aquesta acció no es pot desfer. Els comptes amb activitat registrada no es poden eliminar: s'han de desactivar.`,
+                confirmLabel: 'Elimina el compte',
+                danger: true,
+              });
+              if (!ok) return;
+              await act(remove, async () => {
+                await api.del(`/api/users/${u.id}`);
+                toast(`S'ha eliminat el compte de ${u.name}.`);
+              });
+            });
             return h('tr', {},
               h('td', {}, u.name, self ? h('span', { class: 'tag', style: { 'margin-left': '8px' } }, 'Tu') : null),
               h('td', { class: 'muted' }, u.email),
               h('td', {}, role),
               h('td', {}, h('span', { class: 'tag' }, USER_STATUS_LABELS[u.status])),
               h('td', { class: 'muted' }, u.last_login_at ? formatDate(u.last_login_at) : 'Encara no ha entrat'),
-              h('td', { class: 'actions' }, rename, clearPassword, toggle));
+              h('td', { class: 'actions' }, rename, clearPassword, toggle, remove));
           })))));
   }
 

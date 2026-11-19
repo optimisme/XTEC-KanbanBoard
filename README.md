@@ -73,7 +73,7 @@ ha nivells de prioritat a part. També es poden importar d'un fitxer Markdown.
 
 Els grups s'omplen escrivint el correu institucional de cada alumne. Cada grup
 té el seu tauler, el seu repositori de GitHub i una barra que en resumeix el
-progrés.
+progrés. A més del número, un grup pot tenir un nom curt opcional.
 
 ![Grups del projecte amb el seu progrés](assets/05-grups.png)
 
@@ -111,7 +111,9 @@ finalitzades, col·laboracions, comentaris, bloquejos i traspassos.
 ### Usuaris
 
 L'administració aprova els comptes nous, afegeix persones per avançat, en
-canvia el rol i les pot desactivar.
+canvia el rol i les pot desactivar. També pot eliminar un compte que no tingui
+activitat registrada; els que en tenen només es poden desactivar, perquè
+l'historial conservi qui va fer cada cosa.
 
 ![Gestió d'usuaris](assets/08-usuaris.png)
 
@@ -232,7 +234,7 @@ progrés, comentaris i historial (els comptes d'usuari es conserven).
 
 | Acció | Administració | Professorat (del projecte) | Alumnat (del grup) |
 |---|:-:|:-:|:-:|
-| Gestionar usuaris (rols, aprovacions, desactivar comptes) | ✔ | | |
+| Gestionar usuaris (rols, aprovacions, desactivar i eliminar comptes) | ✔ | | |
 | Esborrar definitivament un projecte arxivat | ✔ | | |
 | Crear projectes | | ✔ | |
 | Editar, arxivar i duplicar un projecte | ✔ | ✔ | |
@@ -246,7 +248,7 @@ progrés, comentaris i historial (els comptes d'usuari es conserven).
 | Comentar les tasques | ✔ | ✔ | ✔ |
 | Traspassar una tasca pròpia a un company del grup | | | ✔ |
 | Gestionar els col·laboradors d'una tasca pròpia | ✔ | ✔ | ✔ |
-| Configurar el repositori de GitHub del grup | ✔ | | ✔ |
+| Configurar el repositori de GitHub i la web del grup | ✔ | | ✔ |
 
 L'accés del professorat depèn **només** d'estar assignat al projecte. Qui crea
 o duplica un projecte hi queda assignat automàticament, i un professor no es
@@ -511,14 +513,14 @@ amb `GET /api/session`).
 | Àrea | Punts d'accés |
 |---|---|
 | Autenticació | `GET /auth/login`, `GET <ruta de retorn>`, `POST /auth/password-login`, `POST /auth/logout`, `GET /api/session` |
-| Usuaris | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `DELETE /api/users/:id/password`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PATCH /api/profile`, `PUT /api/profile/password` |
+| Usuaris | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `DELETE /api/users/:id/password`, `DELETE /api/users/:id`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PATCH /api/profile`, `PUT /api/profile/password` |
 | Etiquetes | `GET/POST /api/projects/:id/tags`, `GET /api/projects/:id/tags/suggestions`, `PUT/DELETE /api/tags/:id` |
 | Projectes | `GET/POST /api/projects`, `GET/PUT/DELETE /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers`, `DELETE …/teachers/:userId` |
-| Grups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
+| Grups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `PUT /api/groups/:id/web`, `GET /api/groups/:id/board` |
 | Tasques compartides | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |
 | Importació | `GET /api/projects/:id/import/template`, `POST …/import/preview`, `POST …/import` |
 | Tasques de grup | `GET /api/group-tasks/:id`, `POST …/status`, `POST …/responsible`, `POST …/collaborators`, `DELETE …/collaborators/:userId`, `POST …/comments`, `GET …/history` |
-| Supervisió | `GET /api/projects/:id/matrix`, `GET /api/blocked-tasks`, `GET /api/projects/:id/students/:userId/contributions` |
+| Supervisió | `GET /api/projects/:id/matrix`, `GET /api/projects/:id/ranking`, `GET /api/blocked-tasks`, `GET /api/projects/:id/students/:userId/contributions` |
 
 ## Estructura del repositori
 

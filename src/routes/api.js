@@ -24,6 +24,7 @@ router.get('/users', adminOnly, admin.listUsers);
 router.post('/users', adminOnly, admin.createUser);
 router.patch('/users/:id', adminOnly, admin.updateUser);
 router.delete('/users/:id/password', adminOnly, admin.clearPassword);
+router.delete('/users/:id', adminOnly, admin.deleteUser);
 router.post('/users/:id/approve', adminOnly, admin.approveUser);
 router.post('/users/:id/reject', adminOnly, admin.rejectUser);
 
@@ -58,6 +59,7 @@ router.post('/projects/:projectId/groups', projects.createGroup);
 router.put('/groups/:groupId/students', projects.setGroupStudents);
 router.delete('/groups/:groupId', projects.deleteGroup);
 router.put('/groups/:groupId/github', projects.setGithubUrl);
+router.put('/groups/:groupId/web', projects.setWebUrl);
 router.get('/groups/:groupId/board', groupTasks.board);
 
 // Shared task definitions
@@ -85,6 +87,7 @@ router.get('/group-tasks/:groupTaskId/history', groupTasks.history);
 
 // Supervision
 router.get('/projects/:projectId/matrix', projects.matrix);
+router.get('/projects/:projectId/ranking', projects.ranking);
 router.get('/blocked-tasks', projects.blockedTasks);
 router.get('/projects/:projectId/students/:userId/contributions', projects.contributions);
 

@@ -35,6 +35,11 @@ export async function clearPassword(req, res) {
   res.json(await userService.clearPassword(req.user, v.id(req.params.id), req.sessionID));
 }
 
+export async function deleteUser(req, res) {
+  await userService.remove(req.user, v.id(req.params.id));
+  res.status(204).end();
+}
+
 export async function updateUser(req, res) {
   res.json(await userService.update(req.user, v.id(req.params.id), req.body));
 }

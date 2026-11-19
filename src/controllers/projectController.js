@@ -94,6 +94,10 @@ export async function deleteGroup(req, res) {
   res.json(await groupService.remove(req.user, groupId(req)));
 }
 
+export async function setWebUrl(req, res) {
+  res.json(await groupService.setWebUrl(req.user, groupId(req), req.body));
+}
+
 export async function setGithubUrl(req, res) {
   res.json(await groupService.setGithubUrl(req.user, groupId(req), req.body));
 }
@@ -147,6 +151,10 @@ export async function importTasks(req, res) {
 }
 
 // ---- Supervision ----------------------------------------------------------------------
+
+export async function ranking(req, res) {
+  res.json(await supervisionService.ranking(req.user, projectId(req)));
+}
 
 export async function matrix(req, res) {
   res.json(await supervisionService.matrix(req.user, projectId(req), req.query));

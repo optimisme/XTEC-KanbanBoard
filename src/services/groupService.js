@@ -164,3 +164,13 @@ export async function setGithubUrl(user, groupId, body) {
   await groupRepo.setGithubUrl(db, groupId, url);
   return { id: groupId, github_url: url };
 }
+
+// The published site of the group's work, with the same rule as the repository.
+export async function setWebUrl(user, groupId, body) {
+  const url = v.webUrl(body.web_url);
+  const access = await groupAccess(db, user, groupId);
+  if (access.level === 'teacher') throw forbidden("Només l'alumnat del grup pot configurar la web.");
+  assertWritable(access.project);
+  await groupRepo.setWebUrl(db, groupId, url);
+  return { id: groupId, web_url: url };
+}

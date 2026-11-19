@@ -138,3 +138,30 @@ export async function clearPassword(actor, userId, sessionId) {
   await userRepo.deleteSessions(db, userId, sessionId);
   return present(await userRepo.findById(db, userId));
 }
+
+// An administrator deletes an account for good. Only accounts without any
+// recorded work can go: tasks, comments and history keep the names of the
+// people who took part, so anyone who appears there is deactivated instead.
+export async function remove(actor, userId) {
+  const HAS_ACTIVITY =
+    "Aquest compte té activitat registrada (tasques, comentaris o historial) i no es pot eliminar sense perdre-la. Desactiva'l perquè no pugui entrar.";
+  try {
+    await db.tx(async (t) => {
+      const user = await userRepo.findById(t, userId);
+      if (!user) throw notFound("No s'ha trobat l'usuari.");
+      if (user.id === actor.id) throw conflict('No pots eliminar el teu propi compte.');
+      if (isLocalAdmin(user)) throw conflict("Aquest compte es defineix a la configuració del servidor i no es pot eliminar.");
+      const alone = await userRepo.soleMemberGroups(t, userId);
+      if (alone.length > 0) {
+        const g = alone[0];
+        throw conflict(`${user.name} és l'única persona del Grup ${g.group_number} de «${g.project_name}». Elimina el grup o afegeix-hi algú abans.`);
+      }
+      if (await userRepo.isNamedInHistory(t, userId)) throw conflict(HAS_ACTIVITY);
+      await userRepo.remove(t, userId);
+      await userRepo.deleteSessions(t, userId);
+    });
+  } catch (err) {
+    if (err.code === 'ER_ROW_IS_REFERENCED_2') throw conflict(HAS_ACTIVITY);
+    throw err;
+  }
+}
