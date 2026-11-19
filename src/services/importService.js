@@ -1,14 +1,17 @@
 import { db } from '../db/pool.js';
 import * as projectRepo from '../repositories/projectRepository.js';
-import * as moduleRepo from '../repositories/moduleRepository.js';
+import * as tagRepo from '../repositories/tagRepository.js';
 import * as taskRepo from '../repositories/taskRepository.js';
 import { conflict, HttpError, notFound } from '../utils/errors.js';
 import * as v from '../validators/index.js';
 import { assertWritable, managerAccess } from './accessService.js';
+import { resolveNames } from './tagService.js';
 import { insertTask, list as listTasks } from './taskService.js';
 
 const MAX_MARKDOWN_LENGTH = 500000;
-const MODULES_LINE = /^\*\*(?:modules|mòduls|moduls)\s*:\*\*\s*(.*)$|^\*\*(?:modules|mòduls|moduls)\*\*\s*:\s*(.*)$/i;
+// "**Tags:** a, b" (also "Etiquetes", and "Modules"/"Mòduls" from older files).
+const TAG_WORDS = '(?:tags|etiquetes|modules|mòduls|moduls)';
+const TAGS_LINE = new RegExp(`^\\*\\*${TAG_WORDS}\\s*:\\*\\*\\s*(.*)$|^\\*\\*${TAG_WORDS}\\*\\*\\s*:\\s*(.*)$`, 'i');
 const DESCRIPTION_HEADING = /^###\s+(?:description|descripció|descripcio)\s*$/i;
 
 // Parses the import format: every "## " heading starts a task, in document
@@ -22,16 +25,16 @@ export function parseTasksMarkdown(markdown) {
     if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
 
     if (!inFence && /^##\s+/.test(line)) {
-      current = { title: line.replace(/^##\s+/, '').trim(), moduleNames: null, description: [] };
+      current = { title: line.replace(/^##\s+/, '').trim(), tagNames: null, description: [] };
       tasks.push(current);
       continue;
     }
     if (!current) continue; // Preamble such as the "# Project Tasks" title.
 
     if (!inFence) {
-      const modules = line.trim().match(MODULES_LINE);
-      if (modules && current.moduleNames === null) {
-        current.moduleNames = (modules[1] ?? modules[2]).split(',').map((name) => name.trim()).filter(Boolean);
+      const tags = line.trim().match(TAGS_LINE);
+      if (tags && current.tagNames === null) {
+        current.tagNames = (tags[1] ?? tags[2]).split(',').map((name) => name.trim()).filter(Boolean);
         continue;
       }
       // The optional "### Description" heading is only a marker.
@@ -48,17 +51,19 @@ export function parseTasksMarkdown(markdown) {
 
   return tasks.map((task) => ({
     title: task.title,
-    moduleNames: task.moduleNames || [],
+    tagNames: task.tagNames || [],
     description: clean(task.description),
   }));
 }
 
-// Validates parsed tasks against the project's modules and builds the preview.
-function buildPreview(parsed, projectModules) {
-  const byName = new Map(projectModules.map((m) => [m.name.toLowerCase(), m]));
+// Validates parsed tasks and builds the preview. Tags are optional; names the
+// project does not have yet will be created by the import.
+function buildPreview(parsed, projectTags) {
+  const byName = new Map(projectTags.map((tag) => [tag.name.toLowerCase(), tag]));
   const errors = [];
   const warnings = [];
   const seenTitles = new Set();
+  const newTags = new Map();
 
   if (parsed.length === 0) {
     errors.push('El document no conté cap tasca. Cada tasca ha de començar amb un títol de nivell 2 (##).');
@@ -67,15 +72,13 @@ function buildPreview(parsed, projectModules) {
   const tasks = parsed.map((task, index) => {
     const position = index + 1;
     const label = `Tasca ${position}${task.title ? ` («${task.title}»)` : ''}`;
-    const modules = [];
 
     if (!task.title) errors.push(`${label}: el títol és buit.`);
     if (task.title.length > 200) errors.push(`${label}: el títol supera els 200 caràcters.`);
-    if (task.moduleNames.length === 0) errors.push(`${label}: cal indicar almenys un mòdul (**Modules:** ...).`);
-    for (const name of task.moduleNames) {
-      const module = byName.get(name.toLowerCase());
-      if (!module) errors.push(`${label}: el mòdul «${name}» no està associat al projecte.`);
-      else if (!modules.includes(module)) modules.push(module);
+    if (task.tagNames.length > 12) errors.push(`${label}: té més de 12 etiquetes.`);
+    for (const name of task.tagNames) {
+      if (name.length > 40) errors.push(`${label}: l'etiqueta «${name.slice(0, 40)}…» supera els 40 caràcters.`);
+      else if (!byName.has(name.toLowerCase())) newTags.set(name.toLowerCase(), name);
     }
     if (task.description.length > 100000) errors.push(`${label}: la descripció és massa llarga.`);
     if (!task.description) warnings.push(`${label}: no té descripció.`);
@@ -86,12 +89,14 @@ function buildPreview(parsed, projectModules) {
       order: position,
       title: task.title,
       description: task.description,
-      module_names: task.moduleNames,
-      modules,
+      tags: task.tagNames.map((name) => {
+        const existing = byName.get(name.toLowerCase());
+        return existing ? { ...existing, is_new: false } : { name, is_new: true };
+      }),
     };
   });
 
-  return { tasks, errors, warnings, valid: errors.length === 0 };
+  return { tasks, errors, warnings, new_tags: [...newTags.values()], valid: errors.length === 0 };
 }
 
 function readMarkdown(body) {
@@ -113,19 +118,19 @@ export async function preview(user, projectId, body) {
   await managerAccess(db, user, projectId);
   const markdown = readMarkdown(body);
   await loadImportableProject(db, projectId, { lock: false });
-  return buildPreview(parseTasksMarkdown(markdown), await moduleRepo.listForProject(db, projectId));
+  return buildPreview(parseTasksMarkdown(markdown), await tagRepo.listForProject(db, projectId));
 }
 
-// Atomic: either every task (and its group instances) is created, or none.
+// Atomic: either every task (with its tags and group instances) is created, or none.
 export async function importTasks(user, projectId, body) {
   await managerAccess(db, user, projectId);
   const markdown = readMarkdown(body);
 
   await db.tx(async (t) => {
     await loadImportableProject(t, projectId, { lock: true });
-    const result = buildPreview(parseTasksMarkdown(markdown), await moduleRepo.listForProject(t, projectId));
+    const result = buildPreview(parseTasksMarkdown(markdown), await tagRepo.listForProject(t, projectId));
     if (!result.valid) {
-      throw new HttpError(422, 'import_invalid', 'El document conté errors i no s\'ha importat cap tasca.', {
+      throw new HttpError(422, 'import_invalid', "El document conté errors i no s'ha importat cap tasca.", {
         errors: result.errors,
         warnings: result.warnings,
       });
@@ -135,7 +140,7 @@ export async function importTasks(user, projectId, body) {
         projectId,
         userId: user.id,
         data: { title: task.title, description: task.description },
-        modules: task.modules,
+        tags: await resolveNames(t, projectId, task.tags.map((tag) => tag.name)),
         sortOrder: task.order,
       });
     }
@@ -143,22 +148,18 @@ export async function importTasks(user, projectId, body) {
   return listTasks(user, projectId);
 }
 
-// A ready-to-edit example that uses the project's own module names.
+// A ready-to-edit example that uses the project's own tag names.
 export async function template(user, projectId) {
   await managerAccess(db, user, projectId);
-  const project = await projectRepo.findById(db, projectId);
-  if (!project) throw notFound("No s'ha trobat el projecte.");
-  const names = (await moduleRepo.listForProject(db, projectId)).map((m) => m.name);
+  const names = (await tagRepo.listForProject(db, projectId)).map((tag) => tag.name);
   const first = names[0] || 'Programació';
-  const both = names.length > 1 ? `${names[0]}, ${names[1]}` : first;
+  const both = names.length > 1 ? `${names[0]}, ${names[1]}` : `${first}, Bases de dades`;
 
   return `# Tasques del projecte
 
 ## Crear el repositori de GitHub
 
-**Modules:** ${first}
-
-### Description
+**Tags:** ${first}
 
 Creeu el repositori de GitHub del grup.
 
@@ -169,9 +170,7 @@ Creeu el repositori de GitHub del grup.
 
 ## Dissenyar la base de dades
 
-**Modules:** ${both}
-
-### Description
+**Tags:** ${both}
 
 Creeu l'esquema relacional de la base de dades.
 
@@ -179,5 +178,11 @@ Creeu l'esquema relacional de la base de dades.
 
 - Diagrama entitat-relació complet.
 - Claus primàries i foranes definides.
+
+---
+
+## Presentar el projecte
+
+Aquesta tasca no té etiquetes: la línia **Tags:** és opcional.
 `;
 }

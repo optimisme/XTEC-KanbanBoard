@@ -1,7 +1,7 @@
 // Application shell: session bootstrap, navigation and hash-based routing.
 import { api, ApiError, loadSession, setCsrfToken } from './api.js';
-import { append, clear, closeAllModals, field, h, ROLE_LABELS, run, showError } from './ui.js';
-import { renderModules, renderUsers } from './views/admin.js';
+import { append, clear, closeAllModals, field, h, ROLE_LABELS, run, showError, toast } from './ui.js';
+import { renderUsers } from './views/admin.js';
 import { renderBoard } from './views/board.js';
 import { renderProject } from './views/project.js';
 import { renderProjects } from './views/projects.js';
@@ -17,7 +17,6 @@ const routes = [
   { pattern: /^\/groups\/(\d+)(?:\/task\/(\d+))?$/, render: renderBoard, nav: 'projects', wide: true },
   { pattern: /^\/blocked$/, render: renderBlocked, nav: 'blocked', roles: ['admin', 'teacher'] },
   { pattern: /^\/admin\/users$/, render: renderUsers, nav: 'users', roles: ['admin'] },
-  { pattern: /^\/admin\/modules$/, render: renderModules, nav: 'modules', roles: ['admin'] },
   { pattern: /^\/profile$/, render: renderProfile, nav: 'profile' },
 ];
 
@@ -55,48 +54,40 @@ function renderLogin() {
   const { dev_auth: devAuth } = state.session;
 
   // One form for everyone who does not come through the identity provider:
-  // the administrator from .env (username + password) and, in development
-  // only, institutional emails (no password).
-  const adminLogin = state.session.admin_login;
-  let form = null;
-  if (adminLogin || devAuth) {
-    const identifier = h('input', {
-      type: 'text', required: true, autocomplete: 'username', autocapitalize: 'none', spellcheck: 'false',
-      placeholder: devAuth ? 'nom@domini.cat' : null,
-    });
-    const password = h('input', { type: 'password', autocomplete: 'current-password', required: adminLogin && !devAuth });
-    const submit = h('button', { class: 'btn', type: 'submit' }, 'Entra');
-    const label = adminLogin && devAuth ? 'Usuari o correu institucional' : adminLogin ? 'Usuari' : 'Correu institucional';
-
-    form = h(
-      'form',
-      {
-        class: 'login-form',
-        onSubmit: (event) => {
-          event.preventDefault();
-          run(submit, async () => {
-            const value = identifier.value.trim();
-            // Emails are development accounts; anything else is the administrator.
-            const result = devAuth && (value.includes('@') || !adminLogin)
-              ? await api.post('/auth/dev-login', { email: value })
-              : await api.post('/auth/admin-login', { username: value, password: password.value });
-            setCsrfToken(result.csrf_token);
-            window.location.hash = '';
-            await start();
-          });
-        },
+  // accounts that have set a password (email + password), the administrator
+  // from .env (username + password) and, in development only, institutional
+  // emails with no password at all.
+  const identifier = h('input', {
+    type: 'text', required: true, autocomplete: 'username', autocapitalize: 'none', spellcheck: 'false',
+    placeholder: 'nom@domini.cat',
+  });
+  const password = h('input', { type: 'password', autocomplete: 'current-password', required: !devAuth });
+  const submit = h('button', { class: 'btn', type: 'submit' }, 'Entra');
+  const form = h(
+    'form',
+    {
+      class: 'login-form',
+      onSubmit: (event) => {
+        event.preventDefault();
+        run(submit, async () => {
+          const value = identifier.value.trim();
+          const result = devAuth && value.includes('@') && !password.value
+            ? await api.post('/auth/dev-login', { email: value })
+            : await api.post('/auth/password-login', { username: value, password: password.value });
+          setCsrfToken(result.csrf_token);
+          window.location.hash = '';
+          await start();
+        });
       },
-      field(label, identifier),
-      adminLogin
-        ? field('Contrasenya', password, devAuth ? "Només cal per al compte d'administració." : null)
-        : null,
-      submit,
-      devAuth
-        ? h('p', { class: 'muted', style: { 'margin-top': '12px' } },
-            'Mode de desenvolupament: els correus institucionals entren sense contrasenya. No està disponible en producció.')
-        : null
-    );
-  }
+    },
+    field('Correu o usuari', identifier),
+    field('Contrasenya', password),
+    submit,
+    devAuth
+      ? h('p', { class: 'muted', style: { 'margin-top': '12px' } },
+          'Mode de desenvolupament: un correu institucional sense contrasenya també entra. No està disponible en producció.')
+      : null
+  );
 
   // Institutional sign-in, below a divider inside the card. Before the identity
   // provider is configured the server sends the visitor back here with a short message.
@@ -140,7 +131,7 @@ function renderShell(route) {
 
   const nav = [link('/', user.role === 'student' ? 'Els meus projectes' : 'Projectes', 'projects')];
   if (user.role !== 'student') nav.push(link('/blocked', 'Tasques bloquejades', 'blocked'));
-  if (user.role === 'admin') nav.push(link('/admin/users', 'Usuaris', 'users'), link('/admin/modules', 'Mòduls', 'modules'));
+  if (user.role === 'admin') nav.push(link('/admin/users', 'Usuaris', 'users'));
 
   const main = h('main', { class: `main ${route && route.wide ? 'wide' : ''}`, id: 'main', tabindex: '-1' });
   append(clear(root), 
@@ -207,7 +198,39 @@ async function renderRoute() {
 async function renderProfile(view, params, { user }) {
   const name = h('input', { type: 'text', value: user.name, maxlength: '200', required: true });
   const save = h('button', { class: 'btn primary', type: 'submit' }, 'Desa');
-  append(view, 
+
+  // Optional password, for people who prefer not to use the institutional sign-in.
+  let passwordCard = null;
+  if (user.can_set_password) {
+    const current = h('input', { type: 'password', autocomplete: 'current-password', required: true });
+    const next = h('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: '8', maxlength: '200' });
+    const repeat = h('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: '8', maxlength: '200' });
+    const savePassword = h('button', { class: 'btn primary', type: 'submit' }, user.has_password ? 'Canvia la contrasenya' : 'Defineix la contrasenya');
+    passwordCard = h('form',
+      {
+        class: 'card',
+        style: { 'max-width': '520px' },
+        onSubmit: (event) => {
+          event.preventDefault();
+          if (next.value !== repeat.value) return showError(new Error('Les dues contrasenyes noves no coincideixen.'));
+          return run(savePassword, async () => {
+            await api.put('/api/profile/password', { current_password: current.value, new_password: next.value });
+            toast(user.has_password ? 'Contrasenya canviada.' : 'Contrasenya definida. Ja pots entrar amb el correu i la contrasenya.');
+            await start();
+          });
+        },
+      },
+      h('h2', {}, 'Contrasenya'),
+      h('p', { class: 'muted' }, user.has_password
+        ? 'Pots entrar amb el teu correu i aquesta contrasenya, a més del compte institucional.'
+        : 'Si no vols fer servir el compte institucional, defineix una contrasenya i podràs entrar amb el teu correu.'),
+      user.has_password ? field('Contrasenya actual', current) : null,
+      field('Contrasenya nova', next, 'Almenys 8 caràcters.'),
+      field('Repeteix la contrasenya nova', repeat),
+      savePassword);
+  }
+
+  append(view,
     h('div', { class: 'page-header' }, h('h1', {}, 'El meu perfil')),
     h('form',
       {
@@ -217,14 +240,17 @@ async function renderProfile(view, params, { user }) {
           event.preventDefault();
           run(save, async () => {
             await api.patch('/api/profile', { name: name.value });
+            toast('Nom actualitzat.');
             await start();
           });
         },
       },
+      h('h2', {}, 'Les meves dades'),
       field('Nom', name),
       h('div', { class: 'field' }, h('label', {}, 'Correu'), h('div', {}, user.email)),
       h('div', { class: 'field' }, h('label', {}, 'Rol'), h('div', {}, ROLE_LABELS[user.role])),
-      save)
+      save),
+    passwordCard
   );
 }
 

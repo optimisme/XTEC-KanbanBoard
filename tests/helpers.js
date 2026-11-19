@@ -7,8 +7,8 @@ import { closePool, db, pool } from '../src/db/pool.js';
 
 const TABLES = [
   'task_history', 'task_block_events', 'task_comments', 'group_tasks',
-  'task_versions', 'task_modules', 'task_definitions', 'group_students', 'project_groups',
-  'project_modules', 'project_teachers', 'projects', 'modules', 'users', 'sessions',
+  'task_versions', 'task_tags', 'task_definitions', 'group_students', 'project_groups',
+  'project_tags', 'project_teachers', 'projects', 'users', 'sessions',
 ];
 
 let app;
@@ -66,7 +66,7 @@ export async function login(email, name) {
   };
 }
 
-// A complete project: two modules, one assigned teacher, one unassigned
+// A complete project: two tags, one assigned teacher, one unassigned
 // teacher, two groups (students 1+2 and student 3) and three shared tasks.
 export async function createScenario() {
   const users = {
@@ -80,29 +80,26 @@ export async function createScenario() {
   };
   const admin = await login(users.admin.email);
 
-  const programming = (await admin.post('/api/modules', { name: 'Programming', color: '#2563eb' })).body;
-  const databases = (await admin.post('/api/modules', { name: 'Databases', color: '#fde68a' })).body;
-
   const project = (
     await admin.post('/api/projects', {
       name: 'Project One',
       description: 'A test project',
       academic_year: '2026-2027',
-      module_ids: [programming.id, databases.id],
     })
   ).body;
   await admin.put(`/api/projects/${project.id}/teachers`, { teacher_ids: [users.teacher.id] });
 
   const tasks = [];
-  for (const [title, moduleIds] of [
-    ['Task A', [programming.id]],
-    ['Task B', [databases.id]],
-    ['Task C', [programming.id, databases.id]],
+  // Tags are created on the fly, the first time a task uses their name.
+  for (const [title, tags] of [
+    ['Task A', ['Programming']],
+    ['Task B', ['Databases']],
+    ['Task C', ['Programming', 'Databases']],
   ]) {
     const res = await admin.post(`/api/projects/${project.id}/tasks`, {
       title,
       description: `Description of **${title}**`,
-      module_ids: moduleIds,
+      tags,
     });
     tasks.push(res.body);
   }
@@ -111,7 +108,9 @@ export async function createScenario() {
   const detail = (await admin.post(`/api/projects/${project.id}/groups`, { student_ids: [users.s3.id] })).body;
   const [group0, group1] = detail.groups;
 
-  return { users, admin, modules: { programming, databases }, project, tasks, group0, group1 };
+  const projectTags = (await admin.get(`/api/projects/${project.id}/tags`)).body;
+  const tags = Object.fromEntries(projectTags.map((tag) => [tag.name.toLowerCase(), tag]));
+  return { users, admin, tags, project, tasks, group0, group1 };
 }
 
 // The group task of a shared task inside a group, looked up through the board.

@@ -85,16 +85,82 @@ export function statusBadge(status) {
   return h('span', { class: `status ${status}` }, icon(status), STATUS_LABELS[status]);
 }
 
-export function moduleChip(module) {
-  return h(
-    'span',
-    { class: 'chip', title: module.name, style: { background: module.color, color: module.text_color } },
-    module.name
-  );
+export function tagChip(tag) {
+  return h('span', { class: 'chip', title: tag.name, style: { background: tag.color, color: tag.text_color } }, tag.name);
 }
 
-export function moduleChips(modules) {
-  return h('div', { class: 'chips' }, modules.map(moduleChip));
+export function tagChips(tags) {
+  return h('div', { class: 'chips' }, tags.map(tagChip));
+}
+
+// Dark or white text, whichever reads better on a background color (the
+// server applies the same rule when it stores a tag).
+export function readableTextColor(hex) {
+  const [r, g, b] = [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? '#1f2933' : '#ffffff';
+}
+
+const NEW_TAG_STYLE = { color: '#e5e7eb', text_color: '#1f2933' };
+
+// Tag editor for a task: the chosen tags, a box to type a new one, and
+// clickable suggestions. `suggestions` is { project: [tag], other: [tag] }.
+// Returns { el, values() } where values() is the list of tag names.
+export function tagPicker(selectedTags, suggestions) {
+  const known = [...suggestions.project, ...suggestions.other];
+  const styleOf = (name) => known.find((tag) => tag.name.toLowerCase() === name.toLowerCase()) || NEW_TAG_STYLE;
+  const selected = selectedTags.map((tag) => tag.name);
+  const has = (name) => selected.some((n) => n.toLowerCase() === name.toLowerCase());
+
+  const chosenEl = h('div', { class: 'chips tag-picker-chosen' });
+  const suggestedEl = h('div', { class: 'tag-picker-suggestions' });
+  const input = h('input', { type: 'text', maxlength: '40', placeholder: 'Escriu una etiqueta i prem Retorn', 'aria-label': 'Etiqueta nova' });
+  const addButton = h('button', { class: 'btn', type: 'button' }, 'Afegeix');
+
+  function add(name) {
+    const cleaned = name.trim().replace(/,+$/, '').trim();
+    if (!cleaned || has(cleaned)) return;
+    // Reuse the existing spelling of a known tag.
+    const existing = known.find((tag) => tag.name.toLowerCase() === cleaned.toLowerCase());
+    selected.push(existing ? existing.name : cleaned);
+    draw();
+  }
+
+  function draw() {
+    append(clear(chosenEl), selected.length === 0
+      ? h('span', { class: 'muted' }, 'Sense etiquetes.')
+      : selected.map((name, index) => {
+          const style = styleOf(name);
+          const remove = h('button', { type: 'button', class: 'chip-remove', 'aria-label': `Treu l'etiqueta ${name}` }, '×');
+          remove.addEventListener('click', () => { selected.splice(index, 1); draw(); });
+          return h('span', { class: 'chip removable', style: { background: style.color, color: style.text_color } }, name, remove);
+        }));
+
+    const offer = (tags) => tags.filter((tag) => !has(tag.name)).map((tag) => {
+      const button = h('button', { type: 'button', class: 'chip suggestion', style: { background: tag.color, color: tag.text_color }, title: `Afegeix ${tag.name}` }, `+ ${tag.name}`);
+      button.addEventListener('click', () => add(tag.name));
+      return button;
+    });
+    const own = offer(suggestions.project);
+    const other = offer(suggestions.other);
+    append(clear(suggestedEl),
+      own.length ? [h('span', { class: 'muted' }, 'Del projecte:'), own] : null,
+      other.length ? [h('span', { class: 'muted' }, "D'altres projectes:"), other] : null);
+  }
+
+  const commit = () => { add(input.value); input.value = ''; input.focus(); };
+  addButton.addEventListener('click', commit);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); commit(); }
+  });
+
+  draw();
+  return {
+    el: h('div', { class: 'tag-picker' }, chosenEl, h('div', { class: 'inline-form' }, input, addButton), suggestedEl),
+    // Text still in the box counts as a tag, so nothing typed is lost on save.
+    values: () => { if (input.value.trim()) commit(); return [...selected]; },
+  };
 }
 
 export function avatar(name) {

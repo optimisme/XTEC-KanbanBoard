@@ -1,4 +1,4 @@
-const COLUMNS = 'id, oidc_issuer, oidc_subject, email, name, role, status, last_login_at, created_at, updated_at';
+const COLUMNS = 'id, oidc_issuer, oidc_subject, email, name, password_hash, role, status, last_login_at, created_at, updated_at';
 
 export async function findById(db, id) {
   const rows = await db.query(`SELECT ${COLUMNS} FROM users WHERE id = ?`, [id]);
@@ -33,6 +33,10 @@ export async function create(db, { issuer, subject, email, name, role, status })
 
 export async function bindIdentity(db, id, issuer, subject) {
   await db.query('UPDATE users SET oidc_issuer = ?, oidc_subject = ? WHERE id = ?', [issuer, subject, id]);
+}
+
+export async function setPasswordHash(db, id, passwordHash) {
+  await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
 }
 
 export async function touchLogin(db, id) {

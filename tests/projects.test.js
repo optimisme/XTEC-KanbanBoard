@@ -21,7 +21,7 @@ after(teardown);
 const taskBody = (overrides = {}) => ({
   title: 'New task',
   description: 'Text',
-  module_ids: [s.modules.programming.id],
+  tags: ['Programming'],
   ...overrides,
 });
 
@@ -46,9 +46,9 @@ test('4. teachers only access assigned projects', async () => {
   assert.equal((await otherTeacher.post(`/api/group-tasks/${gt.id}/status`, { status: 'in_progress' })).status, 403);
 });
 
-test('5. an assigned teacher manages every task regardless of its modules', async () => {
-  // Task B belongs only to "Databases"; there is no teacher-module relation at all.
-  const res = await teacher.put(`/api/tasks/${s.tasks[1].id}`, taskBody({ title: 'Task B', description: 'Edited by teacher', module_ids: [s.modules.databases.id] }));
+test('5. an assigned teacher manages every task regardless of its tags', async () => {
+  // Task B is tagged only "Databases"; tags never affect what a teacher can do.
+  const res = await teacher.put(`/api/tasks/${s.tasks[1].id}`, taskBody({ title: 'Task B', description: 'Edited by teacher', tags: ['Databases'] }));
   assert.equal(res.status, 200);
   assert.equal(res.body.description, 'Edited by teacher');
 
@@ -56,7 +56,9 @@ test('5. an assigned teacher manages every task regardless of its modules', asyn
   assert.equal((await teacher.post(`/api/group-tasks/${gt.id}/status`, { status: 'in_progress' })).status, 200);
   assert.equal((await teacher.post(`/api/group-tasks/${gt.id}/status`, { status: 'pending' })).status, 200);
 
-  const tables = await db.query("SHOW TABLES LIKE 'teacher_modules'");
+  const tables = await db.query(
+    "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND (TABLE_NAME LIKE 'teacher\\_%' OR TABLE_NAME LIKE '%module%')"
+  );
   assert.equal(tables.length, 0);
 });
 
@@ -196,27 +198,42 @@ test('11 & 12. task order is global, and only project managers can reorder', asy
 
 test('24. task definition versions are preserved', async () => {
   const taskId = s.tasks[2].id;
-  await teacher.put(`/api/tasks/${taskId}`, taskBody({ title: 'Task C', description: 'Second text', module_ids: [s.modules.programming.id] }));
+  await teacher.put(`/api/tasks/${taskId}`, taskBody({ title: 'Task C', description: 'Second text', tags: ['Programming'] }));
   // Saving identical content does not create a version.
-  const same = await teacher.put(`/api/tasks/${taskId}`, taskBody({ title: 'Task C', description: 'Second text', module_ids: [s.modules.programming.id] }));
+  const same = await teacher.put(`/api/tasks/${taskId}`, taskBody({ title: 'Task C', description: 'Second text', tags: ['Programming'] }));
   assert.equal(same.body.version, 2);
-  const third = await teacher.put(`/api/tasks/${taskId}`, taskBody({ title: 'Task C final', description: 'Second text', module_ids: [s.modules.programming.id] }));
+  const third = await teacher.put(`/api/tasks/${taskId}`, taskBody({ title: 'Task C final', description: 'Second text', tags: ['Programming'] }));
   assert.equal(third.body.version, 3);
 
   const versions = (await teacher.get(`/api/tasks/${taskId}/versions`)).body;
   assert.deepEqual(versions.map((v) => v.version), [3, 2, 1]);
   assert.equal(versions[2].title, 'Task C');
   assert.equal(versions[2].description, 'Description of **Task C**');
-  assert.deepEqual(versions[2].modules.map((m) => m.name).sort(), ['Databases', 'Programming']);
-  assert.deepEqual(versions[1].modules.map((m) => m.name), ['Programming']);
+  assert.deepEqual(versions[2].tags.map((tag) => tag.name).sort(), ['Databases', 'Programming']);
+  assert.deepEqual(versions[1].tags.map((tag) => tag.name), ['Programming']);
   assert.equal(versions[0].modified_by_name, 'Teacher A');
 });
 
-test('tasks: module and markdown rules', async () => {
-  // A task needs at least one module, and only modules of its project.
-  assert.equal((await teacher.post(`/api/projects/${s.project.id}/tasks`, taskBody({ module_ids: [] }))).status, 400);
-  const foreign = (await s.admin.post('/api/modules', { name: 'Networks', color: '#10b981' })).body;
-  assert.equal((await teacher.post(`/api/projects/${s.project.id}/tasks`, taskBody({ module_ids: [foreign.id] }))).status, 400);
+test('tasks: tag and markdown rules', async () => {
+  const projectTagNames = async () => (await teacher.get(`/api/projects/${s.project.id}/tags`)).body.map((tag) => tag.name);
+
+  // A task may have no tags at all.
+  const bare = await teacher.post(`/api/projects/${s.project.id}/tasks`, taskBody({ title: 'No tags', tags: [] }));
+  assert.equal(bare.status, 201);
+  assert.deepEqual(bare.body.tags, []);
+  assert.equal((await teacher.post(`/api/projects/${s.project.id}/tasks`, { title: 'No tags field' })).status, 201);
+
+  // Unknown names become new tags of this project; known ones are reused whatever the letter case.
+  const tagged = await teacher.post(`/api/projects/${s.project.id}/tasks`, taskBody({ title: 'Tagged', tags: ['programming', 'Networks', 'networks'] }));
+  assert.deepEqual(tagged.body.tags.map((tag) => tag.name).sort(), ['Networks', 'Programming']);
+  assert.deepEqual(await projectTagNames(), ['Databases', 'Networks', 'Programming']);
+  assert.match(tagged.body.tags.find((tag) => tag.name === 'Networks').color, /^#[0-9a-f]{6}$/);
+
+  // Validation.
+  assert.equal((await teacher.post(`/api/projects/${s.project.id}/tasks`, taskBody({ tags: 'Programming' }))).status, 400);
+  assert.equal((await teacher.post(`/api/projects/${s.project.id}/tasks`, taskBody({ tags: ['x'.repeat(41)] }))).status, 400);
+  assert.equal((await teacher.post(`/api/projects/${s.project.id}/tasks`, taskBody({ tags: Array.from({ length: 13 }, (_, i) => `t${i}`) }))).status, 400);
+  assert.deepEqual(await projectTagNames(), ['Databases', 'Networks', 'Programming']); // nothing created by failed requests
 
   // Markdown is rendered and sanitized.
   const created = await teacher.post(`/api/projects/${s.project.id}/tasks`, taskBody({
@@ -274,7 +291,6 @@ Create the relational database schema.
     await s.admin.post('/api/projects', {
       name: 'Import target',
       academic_year: '2026-2027',
-      module_ids: [s.modules.programming.id, s.modules.databases.id],
     })
   ).body;
   await s.admin.post(`/api/projects/${empty.id}/groups`, { student_ids: [s.users.s1.id] });
@@ -285,8 +301,8 @@ Create the relational database schema.
   assert.equal((await teacher.post(`/api/projects/${empty.id}/import/preview`, { markdown })).status, 403);
   assert.equal((await student1.post(`/api/projects/${empty.id}/import`, { markdown })).status, 403);
 
-  // 23. One bad task (unknown module) means nothing is created.
-  const invalid = markdown.replace('**Modules:** Databases, Programming', '**Modules:** Databases, Astronomy');
+  // 23. One bad task (a tag name that is too long) means nothing is created, not even tags.
+  const invalid = markdown.replace('**Modules:** Databases, Programming', `**Tags:** Databases, ${'Astronomy'.repeat(6)}`);
   const preview = (await s.admin.post(`/api/projects/${empty.id}/import/preview`, { markdown: invalid })).body;
   assert.equal(preview.valid, false);
   assert.equal(preview.tasks.length, 2);
@@ -296,6 +312,7 @@ Create the relational database schema.
   assert.equal((await s.admin.get(`/api/projects/${empty.id}/tasks`)).body.length, 0);
   const leftovers = await db.query('SELECT COUNT(*) AS n FROM group_tasks WHERE project_id = ?', [empty.id]);
   assert.equal(leftovers[0].n, 0);
+  assert.deepEqual((await s.admin.get(`/api/projects/${empty.id}/tags`)).body, []);
 
   // 22. A valid document imports in order, pending and unassigned, in every group.
   const okPreview = (await s.admin.post(`/api/projects/${empty.id}/import/preview`, { markdown })).body;
@@ -305,7 +322,11 @@ Create the relational database schema.
   const imported = await s.admin.post(`/api/projects/${empty.id}/import`, { markdown });
   assert.equal(imported.status, 201);
   assert.deepEqual(imported.body.map((t) => t.title), ['Create GitHub Repository', 'Design Database']);
-  assert.deepEqual(imported.body[1].modules.map((m) => m.name), ['Databases', 'Programming']);
+  assert.deepEqual(imported.body[1].tags.map((tag) => tag.name), ['Databases', 'Programming']);
+  // The import created the project's tags, reusing the colors those names have elsewhere.
+  const importedTags = (await s.admin.get(`/api/projects/${empty.id}/tags`)).body;
+  assert.deepEqual(importedTags.map((tag) => tag.name), ['Databases', 'Programming']);
+  assert.equal(importedTags[1].color, s.tags.programming.color);
   assert.match(imported.body[1].description, /## not a task heading/);
   // Sections such as "Acceptance Criteria" are simply part of the description.
   assert.match(imported.body[0].description, /### Acceptance Criteria[\s\S]*Every group member has access/);
@@ -322,7 +343,7 @@ Create the relational database schema.
   // The template is downloadable.
   const template = await s.admin.get(`/api/projects/${empty.id}/import/template`);
   assert.equal(template.status, 200);
-  assert.match(template.text, /\*\*Modules:\*\*/);
+  assert.match(template.text, /\*\*Tags:\*\* Databases/);
 });
 
 test('25. project duplication excludes groups, memberships, progress and history', async () => {
@@ -335,12 +356,15 @@ test('25. project duplication excludes groups, memberships, progress and history
   assert.equal(copy.status, 'active');
   assert.deepEqual(copy.groups, []);
   assert.deepEqual(copy.teachers, []);
-  assert.deepEqual(copy.modules.map((m) => m.name), ['Databases', 'Programming']);
+  // Tags are copied into the new project as its own tags (new ids, same names and colors).
+  const sourceTags = (await s.admin.get(`/api/projects/${s.project.id}/tags`)).body;
+  assert.deepEqual(copy.tags.map((tag) => [tag.name, tag.color]), sourceTags.map((tag) => [tag.name, tag.color]));
+  assert.ok(copy.tags.every((tag) => !sourceTags.some((source) => source.id === tag.id)));
 
   const original = (await s.admin.get(`/api/projects/${s.project.id}/tasks`)).body;
   const copied = (await s.admin.get(`/api/projects/${copy.id}/tasks`)).body;
   assert.deepEqual(copied.map((t) => t.title), original.map((t) => t.title));
-  assert.deepEqual(copied.map((t) => t.modules.map((m) => m.name)), original.map((t) => t.modules.map((m) => m.name)));
+  assert.deepEqual(copied.map((t) => t.tags.map((tag) => tag.name)), original.map((t) => t.tags.map((tag) => tag.name)));
   assert.ok(copied.every((t) => t.version === 1));
 
   const counts = await db.query(
@@ -399,7 +423,7 @@ test('26. archived projects cannot be modified through normal editing endpoints'
 
 test('teachers create projects and manage them; teacher assignment stays with admins', async () => {
   const created = await teacher.post('/api/projects', {
-    name: 'Teacher project', academic_year: '2026-2027', module_ids: [s.modules.programming.id],
+    name: 'Teacher project', academic_year: '2026-2027',
   });
   assert.equal(created.status, 201);
   const projectId = created.body.id;
@@ -413,7 +437,7 @@ test('teachers create projects and manage them; teacher assignment stays with ad
   assert.equal((await otherTeacher.put(`/api/projects/${projectId}`, { name: 'Y', academic_year: '2026-2027' })).status, 403);
 
   // The creator edits it, adds tasks, reorders, deletes and archives.
-  assert.equal((await teacher.put(`/api/projects/${projectId}`, { name: 'Teacher project 2', academic_year: '2026-2027', module_ids: [s.modules.programming.id] })).body.name, 'Teacher project 2');
+  assert.equal((await teacher.put(`/api/projects/${projectId}`, { name: 'Teacher project 2', academic_year: '2026-2027' })).body.name, 'Teacher project 2');
   const t1 = (await teacher.post(`/api/projects/${projectId}/tasks`, taskBody({ title: 'One' }))).body;
   const t2 = (await teacher.post(`/api/projects/${projectId}/tasks`, taskBody({ title: 'Two' }))).body;
   const order = await teacher.put(`/api/projects/${projectId}/tasks/order`, { task_ids: [t2.id, t1.id] });
@@ -422,10 +446,9 @@ test('teachers create projects and manage them; teacher assignment stays with ad
   assert.equal((await teacher.post(`/api/projects/${projectId}/archive`)).status, 200);
   assert.equal((await teacher.post(`/api/projects/${projectId}/unarchive`)).status, 200);
 
-  // Assigning teachers and managing users or modules remain administrator tasks.
+  // Replacing the list of teachers and managing users remain administrator tasks.
   assert.equal((await teacher.put(`/api/projects/${projectId}/teachers`, { teacher_ids: [s.users.otherTeacher.id] })).status, 403);
   assert.equal((await teacher.get('/api/users')).status, 403);
-  assert.equal((await teacher.post('/api/modules', { name: 'Mine', color: '#000000' })).status, 403);
   s.teacherProjectId = projectId;
 });
 
@@ -495,16 +518,39 @@ test('teachers add other teachers to their project by email', async () => {
   assert.equal((await add(otherTeacher, 'other@xtec.cat')).status, 403);
   assert.equal((await add(student1, 'other@xtec.cat')).status, 403);
 
-  // Only existing, active teacher accounts: no account creation, no role change.
-  assert.equal((await add(teacher, 'nobody.yet@xtec.cat')).status, 404);
+  // Lookup tells whether the email has an account and whether it can be used.
+  const lookup = async (email) => (await teacher.post('/api/teachers/lookup', { email })).body;
+  assert.deepEqual(await lookup('nobody.yet@xtec.cat'), { email: 'nobody.yet@xtec.cat', found: false });
+  assert.equal((await lookup('other@xtec.cat')).problem, null);
+  assert.match((await lookup('s2@xtec.cat')).problem, /professorat/);
+  assert.equal((await student1.post('/api/teachers/lookup', { email: 'other@xtec.cat' })).status, 403);
+
+  // An email without an account needs a name; nothing is created without it.
+  assert.equal((await add(teacher, 'nobody.yet@xtec.cat')).status, 400);
   assert.equal((await db.query("SELECT COUNT(*) AS n FROM users WHERE email = 'nobody.yet@xtec.cat'"))[0].n, 0);
+  // With a name, the teacher account is created and added to the project.
+  const fresh = await teacher.post(`/api/projects/${projectId}/teachers`, { email: 'Nobody.Yet@xtec.cat', name: 'New Colleague' });
+  assert.equal(fresh.status, 201);
+  const [colleague] = await db.query("SELECT role, status, oidc_subject FROM users WHERE email = 'nobody.yet@xtec.cat'");
+  assert.deepEqual({ ...colleague }, { role: 'teacher', status: 'active', oidc_subject: null });
+  // They sign in later (verified email) and manage the project, with no approval.
+  const colleagueClient = await login('nobody.yet@xtec.cat');
+  assert.equal((await colleagueClient.get(`/api/projects/${projectId}`)).body.can_manage, true);
+
+  // A student is never turned into a teacher; other domains are refused.
   assert.equal((await add(teacher, 's2@xtec.cat')).status, 409);
   assert.equal((await db.query("SELECT role FROM users WHERE email = 's2@xtec.cat'"))[0].role, 'student');
+  assert.equal((await teacher.post(`/api/projects/${projectId}/teachers`, { email: 'x@gmail.com', name: 'X' })).status, 400);
   assert.equal((await add(teacher, 'not-an-email')).status, 400);
+
+  // A pending account is approved as a teacher when added.
+  await login('pending.prof@xtec.cat', 'Pending Prof');
+  assert.equal((await add(teacher, 'pending.prof@xtec.cat')).status, 201);
+  assert.deepEqual({ ...(await db.query("SELECT role, status FROM users WHERE email = 'pending.prof@xtec.cat'"))[0] }, { role: 'teacher', status: 'active' });
 
   const added = await add(teacher, 'Other@xtec.cat');
   assert.equal(added.status, 201);
-  assert.deepEqual(added.body.teachers.map((t) => t.name).sort(), ['Teacher A', 'Teacher B']);
+  assert.deepEqual(added.body.teachers.map((t) => t.name).sort(), ['New Colleague', 'Pending Prof', 'Teacher A', 'Teacher B']);
   assert.equal((await add(teacher, 'other@xtec.cat')).status, 409); // already there
 
   // The added teacher now manages the project like any other teacher of it.

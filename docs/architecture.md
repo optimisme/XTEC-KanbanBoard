@@ -44,7 +44,8 @@ created at the same time cannot miss each other.
 | A group's tasks belong to the group's project | Composite foreign keys through `project_id` |
 | The responsible student is a member of the group | `FOREIGN KEY (group_id, responsible_user_id)` → `group_students` |
 | At most one responsible student | A single nullable column |
-| A task only uses modules of its project | `task_modules (project_id, module_id)` → `project_modules` |
+| A task only uses tags of its own project | `task_tags (tag_id, project_id)` → `project_tags (id, project_id)` |
+| Tag names are unique inside a project | `UNIQUE (project_id, name)` on `project_tags` |
 | At most one open block per task | Unique key over a generated column that is `1` while `unblocked_at IS NULL` |
 | History is not lost | No `ON DELETE CASCADE` anywhere; projects are archived, tasks are soft-deleted |
 
@@ -58,11 +59,13 @@ exception is the *Finalitzat* column, which is display-only history: it lists
 tasks in the order they were completed (`completed_at`, oldest first) and
 shows the completion date on each card.
 
-### No teacher–module relation
+### Tags never grant access
 
-Teacher permissions come only from `project_teachers`. Modules are labels
-(`project_modules`, `task_modules`). There is deliberately no `teacher_modules`
-table, and a test asserts that it does not exist.
+Teacher permissions come only from `project_teachers`. Tags (`project_tags`,
+`task_tags`) are free labels owned by a project: they classify and color
+tasks and are never consulted for authorization. Tasks send tag *names*; the
+service reuses the project's tag with that name or creates it in the same
+transaction that saves the task.
 
 ## Authorization
 
@@ -117,7 +120,7 @@ never read as proof of having done the work.
 
 ## Versioning
 
-Every change to a definition's title, description or modules stores a full snapshot in `task_versions` and increments
+Every change to a definition's title, description or tags stores a full snapshot in `task_versions` and increments
 `task_definitions.version`. Saving without changes creates no version. When a
 group completes a task, the current version number is stored with it.
 
@@ -132,6 +135,10 @@ group completes a task, the current version number is stored with it.
   account takes effect immediately.
 - Sessions are server-side, stored in MySQL, with `HttpOnly`, `SameSite=Lax`
   and (in production) `Secure` cookies. The session id is regenerated at login.
+- Optional passwords are stored as salted scrypt hashes
+  (`scrypt$N$r$p$salt$hash`) and compared in constant time. A sign-in attempt
+  for an unknown email runs the same computation, and repeated failures lock
+  the client address out for a while.
 - CSRF: synchronizer token kept in the session and required in the
   `X-CSRF-Token` header for every state-changing request.
 - The development login is only registered when `DEV_AUTH_ENABLED=true`, and

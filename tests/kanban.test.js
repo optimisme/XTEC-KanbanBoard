@@ -237,8 +237,8 @@ test('supervision: progress matrix and student contributions', async () => {
   assert.equal(cell.status, 'in_progress');
   assert.equal(matrix.groups[1].cells[s.tasks[0].id].status, 'pending');
 
-  // Module filter keeps the global order.
-  const filtered = (await teacher.get(`/api/projects/${s.project.id}/matrix?module_id=${s.modules.databases.id}`)).body;
+  // Tag filter keeps the global order.
+  const filtered = (await teacher.get(`/api/projects/${s.project.id}/matrix?tag_id=${s.tags.databases.id}`)).body;
   assert.deepEqual(filtered.tasks.map((t) => t.title), ['Task B', 'Task C']);
 
   const contrib = (await teacher.get(`/api/projects/${s.project.id}/students/${s.users.s2.id}/contributions`)).body;

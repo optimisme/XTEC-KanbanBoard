@@ -2,7 +2,8 @@
 // students and (administrators only) settings.
 import { api } from '../api.js';
 import {
-  append, checkList, clear, confirmDialog, field, h, icon, modal, moduleChips, run, showError, STATUS_LABELS,
+  append, checkList, clear, confirmDialog, field, h, icon, modal, promptDialog, readableTextColor, run, showError,
+  STATUS_LABELS, tagChip, tagChips,
   STATUSES, statusBadge, toast,
 } from '../ui.js';
 import { openProjectForm } from './projects.js';
@@ -237,7 +238,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
               class: 'task-title', type: 'button',
               onClick: () => openDefinition(task.id, { canManage: project.can_manage, writable, onChanged: refresh }).catch(showError),
             }, task.title),
-            moduleChips(task.modules)),
+            tagChips(task.tags)),
           project.can_manage && writable ? h('div', { class: 'row-actions' }, up, down, remove) : null);
       }));
       if (tasks.length === 0) append(listEl, h('li', { class: 'empty' }, 'Aquest projecte encara no té tasques.'));
@@ -251,12 +252,12 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
 
   async function matrixTab() {
     const holder = h('div', {});
-    const filter = h('select', { id: 'matrix-module' },
-      h('option', { value: '' }, 'Tots els mòduls'),
-      project.modules.map((m) => h('option', { value: String(m.id) }, m.name)));
+    const filter = h('select', { id: 'matrix-tag' },
+      h('option', { value: '' }, 'Totes les etiquetes'),
+      project.tags.map((tag) => h('option', { value: String(tag.id) }, tag.name)));
 
     async function draw() {
-      const matrix = await api.get(`/api/projects/${project.id}/matrix${filter.value ? `?module_id=${filter.value}` : ''}`);
+      const matrix = await api.get(`/api/projects/${project.id}/matrix${filter.value ? `?tag_id=${filter.value}` : ''}`);
       if (matrix.groups.length === 0 || matrix.tasks.length === 0) {
         append(clear(holder), h('div', { class: 'empty' }, 'No hi ha dades per mostrar: calen grups i tasques.'));
         return;
@@ -287,7 +288,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
     }
 
     filter.addEventListener('change', () => draw().catch(showError));
-    append(content, h('div', { class: 'toolbar' }, h('label', { for: 'matrix-module' }, 'Filtra per mòdul'), filter), holder);
+    append(content, h('div', { class: 'toolbar' }, h('label', { for: 'matrix-tag' }, 'Filtra per etiqueta'), filter), holder);
     await draw();
   }
 
@@ -324,7 +325,8 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       reload();
     }));
 
-    // Teachers add a colleague by email; the colleague must already have a teacher account.
+    // Teachers and administrators add a colleague by email. An email without
+    // an account asks for the person's name and creates a teacher account.
     function addTeacherForm() {
       const email = h('input', { type: 'email', required: true, placeholder: 'professor@xtec.cat', autocomplete: 'off', 'aria-label': 'Correu del professor o professora' });
       const add = h('button', { class: 'btn', type: 'submit' }, 'Afegeix');
@@ -333,15 +335,87 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         onSubmit: (event) => {
           event.preventDefault();
           run(add, async () => {
-            await api.post(`/api/projects/${project.id}/teachers`, { email: email.value });
+            const value = email.value.trim().toLowerCase();
+            const found = await api.post('/api/teachers/lookup', { email: value });
+            if (found.found && found.problem) throw new Error(found.problem);
+            let name;
+            if (!found.found) {
+              name = await promptDialog({
+                title: 'Compte nou de professorat',
+                label: 'Nom i cognoms',
+                hint: `${value} encara no té compte. Es crearà amb aquest nom i podrà entrar amb el compte institucional.`,
+                confirmLabel: 'Crea i afegeix',
+              });
+              if (name === null) return;
+            }
+            await api.post(`/api/projects/${project.id}/teachers`, { email: value, name });
             toast('Professorat afegit al projecte.');
             reload();
           });
         },
       },
         h('label', {}, 'Afegeix professorat pel seu correu institucional'),
-        h('div', { class: 'inline-form' }, email, add),
-        h('div', { class: 'hint' }, 'Ha de tenir ja un compte de professorat a l\'aplicació.'));
+        h('div', { class: 'inline-form' }, email, add));
+    }
+
+    // Tags of the project: rename, recolor, delete, add.
+    async function tagsCard() {
+      let tags = await api.get(`/api/projects/${project.id}/tags`);
+      const listEl = h('ul', { class: 'member-list' });
+      const refresh = async () => { tags = await api.get(`/api/projects/${project.id}/tags`); draw(); };
+
+      function draw() {
+        append(clear(listEl), tags.length === 0
+          ? h('li', { class: 'muted' }, 'Aquest projecte encara no té etiquetes.')
+          : tags.map((tag) => {
+              const name = h('input', { type: 'text', maxlength: '40', value: tag.name, 'aria-label': `Nom de l'etiqueta ${tag.name}`, disabled: !writable });
+              const color = h('input', { type: 'color', value: tag.color, 'aria-label': `Color de l'etiqueta ${tag.name}`, disabled: !writable });
+              const preview = h('span', {});
+              const drawPreview = () => append(clear(preview),
+                tagChip({ name: name.value || tag.name, color: color.value, text_color: readableTextColor(color.value) }));
+              const save = () => run(null, async () => {
+                if (!name.value.trim()) { name.value = tag.name; return; }
+                if (name.value.trim() === tag.name && color.value === tag.color) return;
+                await api.put(`/api/tags/${tag.id}`, { name: name.value, color: color.value });
+                await refresh();
+              });
+              name.addEventListener('input', drawPreview);
+              color.addEventListener('input', drawPreview);
+              name.addEventListener('change', save);
+              color.addEventListener('change', save);
+              const remove = h('button', { class: 'btn ghost small danger', type: 'button', disabled: !writable }, 'Elimina');
+              remove.addEventListener('click', async () => {
+                const ok = await confirmDialog({
+                  title: "Elimina l'etiqueta", message: `«${tag.name}» es traurà de totes les tasques que la tenen.`,
+                  confirmLabel: 'Elimina', danger: true,
+                });
+                if (ok) await run(remove, async () => { await api.del(`/api/tags/${tag.id}`); await refresh(); });
+              });
+              drawPreview();
+              return h('li', {}, h('div', { class: 'tag-row' }, color, name, preview), remove);
+            }));
+      }
+
+      const newName = h('input', { type: 'text', maxlength: '40', placeholder: 'Etiqueta nova', 'aria-label': 'Etiqueta nova' });
+      const add = h('button', { class: 'btn', type: 'submit' }, 'Afegeix');
+      const form = h('form', {
+        class: 'inline-form', style: { 'margin-top': '12px' },
+        onSubmit: (event) => {
+          event.preventDefault();
+          run(add, async () => {
+            await api.post(`/api/projects/${project.id}/tags`, { name: newName.value });
+            newName.value = '';
+            await refresh();
+          });
+        },
+      }, newName, add);
+
+      draw();
+      return h('div', { class: 'card' },
+        h('h2', {}, 'Etiquetes'),
+        h('p', { class: 'muted' }, "Les etiquetes classifiquen i acoloreixen les tasques d'aquest projecte. També es poden crear directament en editar una tasca."),
+        listEl,
+        writable ? form : null);
     }
 
     const archive = h('button', { class: 'btn', type: 'button' }, writable ? 'Arxiva el projecte' : 'Reactiva el projecte');
@@ -372,7 +446,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
           });
         },
       },
-        h('div', { class: 'notice' }, 'Es copien els mòduls, les tasques compartides i el seu ordre. No es copien el professorat, els grups, l\'alumnat ni cap progrés.'),
+        h('div', { class: 'notice' }, 'Es copien les etiquetes, les tasques compartides i el seu ordre. No es copien el professorat, els grups, l\'alumnat ni cap progrés.'),
         field('Nom del projecte nou', name),
         field('Curs acadèmic', year),
         field('Descripció', description),
@@ -383,22 +457,22 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
     append(content, 
       h('div', { class: 'card' },
         h('h2', {}, 'Dades del projecte'),
-        h('p', { class: 'muted' }, `Mòduls: ${project.modules.map((m) => m.name).join(', ') || 'cap'}`),
-        moduleChips(project.modules),
         h('div', { class: 'card-actions' },
           h('button', { class: 'btn', type: 'button', disabled: !writable, onClick: () => openProjectForm({ project, onSaved: reload }).catch(showError) }, 'Edita el projecte'))),
       isAdmin
         ? h('div', { class: 'card' },
         h('h2', {}, 'Professorat assignat'),
-        h('p', { class: 'muted' }, 'El professorat assignat pot gestionar totes les tasques i tots els grups del projecte, independentment dels mòduls.'),
+        h('p', { class: 'muted' }, 'El professorat assignat pot gestionar totes les tasques i tots els grups del projecte.'),
         teacherList.el,
-        h('div', { class: 'card-actions' }, saveTeachers))
+        h('div', { class: 'card-actions' }, saveTeachers),
+        writable ? addTeacherForm() : null)
         : h('div', { class: 'card' },
             h('h2', {}, 'Professorat assignat'),
             h('ul', { class: 'member-list' }, project.teachers.map((t) =>
               h('li', {}, h('div', {}, h('strong', {}, t.name), h('div', { class: 'muted' }, t.email))))),
             writable ? addTeacherForm() : null,
             h('p', { class: 'muted', style: { 'margin-top': '10px' } }, "Per treure professorat d'aquest projecte, contacta amb administració.")),
+      await tagsCard(),
       h('div', { class: 'card' },
         h('h2', {}, 'Cicle de vida'),
         h('p', { class: 'muted' }, 'Duplica el projecte per a un curs nou o arxiva\'l quan acabi.'),

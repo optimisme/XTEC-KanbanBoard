@@ -4,7 +4,7 @@ A Kanban management application for vocational training institutes. Teachers
 define the tasks of a project once; every project group gets the same tasks,
 in the same order, and tracks its own progress on an independent board.
 
-- **Administrators** manage users and professional modules, and can do everything in every project.
+- **Administrators** manage users and can do everything in every project.
 - **Teachers** create projects and fully manage the ones they created or are assigned to: tasks, task order, groups and students.
 - **Students** work on their own group's board.
 
@@ -120,7 +120,7 @@ Generate a session secret with:
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Functional configuration, such as module colors, is stored in MySQL.
+Functional configuration, such as tag colors, is stored in MySQL.
 
 ## Institutional OAuth setup
 
@@ -328,8 +328,9 @@ Proxmox container.
 
 | Capability | Admin | Teacher (assigned project) | Student (own group) |
 |---|:-:|:-:|:-:|
-| Manage users and professional modules | ✔ | | |
-| Add a teacher to a project (by email, existing teacher accounts) | ✔ | ✔ | |
+| Manage users (roles, approvals, disabling accounts) | ✔ | | |
+| Add a teacher to a project by email (creating the account if needed) | ✔ | ✔ | |
+| Create and manage the project's tags | ✔ | ✔ | |
 | Remove teachers from a project | ✔ | | |
 | Create projects | ✔ | ✔ | |
 | Edit, archive and duplicate a project | ✔ | ✔ | |
@@ -343,11 +344,41 @@ Proxmox container.
 | Configure the group's GitHub repository URL | ✔ | | ✔ |
 
 A teacher who creates (or duplicates) a project is assigned to it
-automatically. Its teachers can add colleagues by email, as long as they
-already have a teacher account; only administrators remove teachers. Teacher access
+automatically. Its teachers can add colleagues by email; if the email has no
+account yet, they type the colleague's name and the teacher account is
+created. Only administrators remove teachers. An existing student account is
+never turned into a teacher this way. Teacher access
 depends **only** on that assignment (`project_teachers`).
-Professional modules categorize and color tasks; they never grant or restrict
-permissions. Every rule is enforced by the backend.
+Tags classify and color tasks; they never grant or restrict permissions. Every rule is enforced by the backend.
+
+## Tags
+
+Tags replace the former global "professional modules". They belong to one
+project, and a task can have any number of them, or none.
+
+- A project's teachers create tags simply by typing a new name while editing
+  a task; the editor suggests the project's tags and the names used in the
+  teacher's other projects.
+- A new tag gets a color automatically (the same color the name has in
+  another project, if any). Names, colors and deletions are managed in the
+  project's *Configuració* tab.
+- Deleting a tag removes it from the tasks that had it; nothing else changes.
+- The progress matrix can be filtered by tag.
+
+## Passwords
+
+Signing in with the institutional account needs no password. People who
+prefer not to use it can set a password in **El meu perfil** and then sign in
+with their email and that password.
+
+- Passwords are stored only as salted **scrypt** hashes (a slow function
+  designed for passwords), never in plain text. A fast hash such as MD5 would
+  not be safe for this.
+- The minimum length is 8 characters. Changing a password requires the
+  current one.
+- After 5 failed sign-in attempts an address is locked out for 15 minutes.
+- A person must sign in once (institutional account) before they can set a
+  password; there is no "forgot my password" email.
 
 ## Task states and assignment
 
@@ -396,7 +427,7 @@ shows the format:
 ```markdown
 ## Create GitHub Repository
 
-**Modules:** Programming
+**Tags:** Programming
 
 ### Description
 
@@ -406,11 +437,14 @@ Create the group's GitHub repository.
 ```
 
 - Each `##` heading is a task; document order becomes the global order.
-- `**Modules:**` lists one or more modules already associated with the project.
+- `**Tags:**` is optional and lists the task's tags (`**Etiquetes:**` and the
+  older `**Modules:**` are accepted too). Tags the project does not have yet
+  are created by the import.
 - Everything else under the task is its Markdown description. The
   `### Description` heading is optional (the Catalan `**Mòduls:**` and
   `### Descripció` are accepted too).
-- A preview shows the tasks, their order, modules, errors and warnings.
+- A preview shows the tasks, their order, tags (marking the new ones), errors
+  and warnings.
 - The import is atomic: with any error, nothing is created.
 
 ## Project duplication
@@ -418,7 +452,7 @@ Create the group's GitHub repository.
 From a project's *Configuració* tab an administrator or one of its teachers
 can duplicate it for
 another academic year. The copy receives the name and description (editable),
-the module associations, the shared tasks, their modules and their order. It
+the tags, the shared tasks with their tags, and their order. It
 does **not** receive teachers, groups, students, repository URLs, task states,
 responsible students, comments, blocking events or history.
 
@@ -430,9 +464,9 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 
 | Area | Endpoints |
 |---|---|
-| Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/admin-login`, `POST /auth/logout`, `GET /api/session` |
-| Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
-| Modules | `GET/POST /api/modules`, `PUT/DELETE /api/modules/:id` |
+| Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/password-login`, `POST /auth/logout`, `GET /api/session` |
+| Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PUT /api/profile/password`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
+| Tags | `GET/POST /api/projects/:id/tags`, `GET /api/projects/:id/tags/suggestions`, `PUT/DELETE /api/tags/:id` |
 | Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers` |
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
 | Shared tasks | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |

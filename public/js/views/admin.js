@@ -1,8 +1,7 @@
-// Administrator screens: user management (with pending approvals) and
-// professional modules.
+// Administrator screen: user management (with pending approvals).
 import { api } from '../api.js';
 import {
-  append, clear, confirmDialog, field, formatDate, h, modal, moduleChip, ROLE_LABELS, run, showError, toast,
+  append, clear, field, formatDate, h, modal, ROLE_LABELS, run, toast,
   USER_STATUS_LABELS,
 } from '../ui.js';
 
@@ -127,84 +126,4 @@ export async function renderUsers(view, params, { user: me }) {
   );
   search.style.setProperty('max-width', '260px');
   await load();
-}
-
-export async function renderModules(view) {
-  const holder = h('div', {});
-  let modules = [];
-
-  async function load() {
-    modules = await api.get('/api/modules');
-    draw();
-  }
-
-  function openForm(module) {
-    const name = h('input', { type: 'text', maxlength: '120', required: true, value: module ? module.name : '' });
-    const color = h('input', { type: 'color', value: module ? module.color : '#2563eb' });
-    const preview = h('div', {});
-    // Dark or white text, whichever reads better on the chosen color (the
-    // server applies the same rule when saving).
-    const textFor = (hex) => {
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-        .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? '#1f2933' : '#ffffff';
-    };
-    const drawPreview = () => append(clear(preview), 
-      moduleChip({ name: name.value || 'Nom del mòdul', color: color.value, text_color: textFor(color.value) }));
-    name.addEventListener('input', drawPreview);
-    color.addEventListener('input', drawPreview);
-    drawPreview();
-
-    const save = h('button', { class: 'btn primary', type: 'submit' }, module ? 'Desa' : 'Crea el mòdul');
-    const form = h('form', {
-      onSubmit: (event) => {
-        event.preventDefault();
-        run(save, async () => {
-          const body = { name: name.value, color: color.value };
-          if (module) await api.put(`/api/modules/${module.id}`, body);
-          else await api.post('/api/modules', body);
-          dialog.close();
-          await load();
-        });
-      },
-    },
-      field('Nom', name),
-      field('Color', color, 'El color del text es tria automàticament perquè sigui llegible.'),
-      h('div', { class: 'field' }, h('label', {}, 'Previsualització'), preview),
-      h('div', { class: 'card-actions' }, save));
-    const dialog = modal({ title: module ? 'Edita el mòdul' : 'Nou mòdul', body: form });
-  }
-
-  function draw() {
-    append(clear(holder), modules.length === 0
-      ? h('div', { class: 'empty' }, 'Encara no hi ha mòduls professionals.')
-      : h('div', { class: 'table-wrap' }, h('table', {},
-          h('thead', {}, h('tr', {}, h('th', {}, 'Mòdul'), h('th', {}, 'Etiqueta'), h('th', {}, 'Color'), h('th', {}, ''))),
-          h('tbody', {}, modules.map((m) => {
-            const remove = h('button', { class: 'btn small danger', type: 'button' }, 'Elimina');
-            remove.addEventListener('click', async () => {
-              const ok = await confirmDialog({
-                title: 'Elimina el mòdul', message: `Vols eliminar «${m.name}»? Només és possible si cap projecte l'utilitza.`,
-                confirmLabel: 'Elimina', danger: true,
-              });
-              if (ok) await run(remove, async () => { await api.del(`/api/modules/${m.id}`); await load(); });
-            });
-            return h('tr', {},
-              h('td', {}, m.name),
-              h('td', {}, moduleChip(m)),
-              h('td', { class: 'muted' }, m.color),
-              h('td', { class: 'actions' },
-                h('button', { class: 'btn small', type: 'button', onClick: () => openForm(m) }, 'Edita'), remove));
-          })))));
-  }
-
-  append(view, 
-    h('div', { class: 'page-header' },
-      h('div', { class: 'titles' },
-        h('h1', {}, 'Mòduls professionals'),
-        h('p', { class: 'muted' }, 'Els mòduls classifiquen i acoloreixen les tasques. No determinen els permisos del professorat.')),
-      h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onClick: () => openForm(null) }, 'Nou mòdul'))),
-    holder
-  );
-  await load().catch(showError);
 }

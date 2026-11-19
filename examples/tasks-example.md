@@ -2,7 +2,7 @@
 
 ## Create GitHub Repository
 
-**Modules:** Programming
+**Tags:** Programming
 
 ### Description
 
@@ -15,7 +15,7 @@ Create the group's GitHub repository.
 
 ## Design Database
 
-**Modules:** Databases, Programming
+**Tags:** Databases, Programming
 
 ### Description
 

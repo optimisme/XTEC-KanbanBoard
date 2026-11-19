@@ -1,7 +1,7 @@
 import { db } from '../db/pool.js';
 import * as groupRepo from '../repositories/groupRepository.js';
 import * as groupTaskRepo from '../repositories/groupTaskRepository.js';
-import * as moduleRepo from '../repositories/moduleRepository.js';
+import * as tagRepo from '../repositories/tagRepository.js';
 import * as taskRepo from '../repositories/taskRepository.js';
 import { badRequest, conflict, forbidden, notFound } from '../utils/errors.js';
 import { renderMarkdown } from '../utils/markdown.js';
@@ -35,14 +35,14 @@ function historyEvent(from, to) {
   return 'state_changed';
 }
 
-function presentCard(row, modules, access, user) {
+function presentCard(row, tags, access, user) {
   return {
     id: row.id,
     group_id: row.group_id,
     task_id: row.task_id,
     title: row.title,
     sort_order: row.sort_order,
-    modules,
+    tags,
     status: row.status,
     responsible: row.responsible_user_id ? { id: row.responsible_user_id, name: row.responsible_name } : null,
     assigned_at: row.assigned_at,
@@ -62,14 +62,14 @@ function presentCard(row, modules, access, user) {
 export async function board(user, groupId) {
   const access = await groupAccess(db, user, groupId);
   const [rows, members] = await Promise.all([groupTaskRepo.board(db, groupId), groupRepo.members(db, groupId)]);
-  const modules = await moduleRepo.mapForTasks(db, rows.map((r) => r.task_id));
+  const tags = await tagRepo.mapForTasks(db, rows.map((r) => r.task_id));
   return {
     project: { id: access.project.id, name: access.project.name, status: access.project.status },
     group: access.group,
     access: access.level,
     can_manage: access.canManage,
     members,
-    tasks: rows.map((row) => presentCard(row, modules.get(row.task_id), access, user)),
+    tasks: rows.map((row) => presentCard(row, tags.get(row.task_id), access, user)),
   };
 }
 
@@ -78,9 +78,9 @@ export async function detail(user, groupTaskId) {
   const row = await groupTaskRepo.findDetailed(db, groupTaskId);
   if (row.deleted_at) throw notFound("No s'ha trobat la tasca.");
 
-  const [definition, modules, members, comments, blockEvents, history] = await Promise.all([
+  const [definition, tags, members, comments, blockEvents, history] = await Promise.all([
     taskRepo.findById(db, row.task_id),
-    moduleRepo.mapForTasks(db, [row.task_id]),
+    tagRepo.mapForTasks(db, [row.task_id]),
     groupRepo.members(db, row.group_id),
     groupTaskRepo.comments(db, groupTaskId),
     groupTaskRepo.blockEvents(db, groupTaskId),
@@ -88,7 +88,7 @@ export async function detail(user, groupTaskId) {
   ]);
 
   return {
-    ...presentCard(row, modules.get(row.task_id), access, user),
+    ...presentCard(row, tags.get(row.task_id), access, user),
     project: { id: access.project.id, name: access.project.name, status: access.project.status },
     group: { id: access.group.id, group_number: access.group.group_number },
     access: access.level,

@@ -3,7 +3,7 @@ import { after, before, test } from 'node:test';
 import request from 'supertest';
 import { identityFromClaims } from '../src/auth/oidc.js';
 import { loginWithIdentity } from '../src/services/authService.js';
-import { createUser, login, setup, teardown } from './helpers.js';
+import { createUser, db, login, setup, teardown } from './helpers.js';
 
 let app;
 before(async () => {
@@ -60,7 +60,7 @@ test('2. pending users cannot access project data', async () => {
   assert.equal(pending.loginResponse.status, 200);
   assert.equal(pending.loginResponse.body.user.status, 'pending');
 
-  for (const url of ['/api/projects', '/api/projects/1', '/api/groups/1/board', '/api/modules', '/api/blocked-tasks']) {
+  for (const url of ['/api/projects', '/api/projects/1', '/api/groups/1/board', '/api/projects/1/tags', '/api/blocked-tasks']) {
     const res = await pending.get(url);
     assert.equal(res.status, 403, url);
     assert.equal(res.body.error.code, 'account_pending');
@@ -108,7 +108,7 @@ test('disabled and rejected users lose access immediately', async () => {
 
 test('state-changing requests need a valid CSRF token', async () => {
   const admin = await login('admin@xtec.cat');
-  const res = await admin.agent.post('/api/modules').send({ name: 'X', color: '#000000' });
+  const res = await admin.agent.post('/api/projects').send({ name: 'X', academic_year: '2026-2027' });
   assert.equal(res.status, 403);
   assert.equal(res.body.error.code, 'invalid_csrf_token');
 });
@@ -128,12 +128,11 @@ test('logout ends the session and login regenerates the session id', async () =>
 test('administrator password login from .env', async () => {
   const agent = request.agent(app);
   const session = await agent.get('/api/session');
-  assert.equal(session.body.admin_login, true);
   const post = (body, token = session.body.csrf_token) =>
-    agent.post('/auth/admin-login').set('X-CSRF-Token', token).send(body);
+    agent.post('/auth/password-login').set('X-CSRF-Token', token).send(body);
 
   // Needs the CSRF token, and rejects wrong or malformed credentials.
-  assert.equal((await agent.post('/auth/admin-login').send({ username: 'admin', password: 'test-admin-password' })).status, 403);
+  assert.equal((await agent.post('/auth/password-login').send({ username: 'admin', password: 'test-admin-password' })).status, 403);
   assert.equal((await post({ username: 'admin', password: 'wrong' })).status, 401);
   assert.equal((await post({ username: 'other', password: 'test-admin-password' })).status, 401);
   assert.equal((await post({ username: { $ne: '' }, password: ['x'] })).status, 401);
@@ -150,11 +149,72 @@ test('administrator password login from .env', async () => {
   assert.equal(locals.length, 1);
 });
 
+test('users set a password and sign in with email and password', async () => {
+  const user = await createUser({ email: 'pw.user@xtec.cat', name: 'Password User', role: 'teacher' });
+  const client = await login('pw.user@xtec.cat');
+  assert.equal(client.loginResponse.body.user.has_password, false);
+  assert.equal(client.loginResponse.body.user.can_set_password, true);
+
+  const attempt = async (username, password) => {
+    const agent = request.agent(app);
+    const session = await agent.get('/api/session');
+    const res = await agent.post('/auth/password-login').set('X-CSRF-Token', session.body.csrf_token).send({ username, password });
+    return { res, agent };
+  };
+  // No password yet: the email cannot be used to sign in.
+  assert.equal((await attempt('pw.user@xtec.cat', 'anything-at-all')).res.status, 401);
+
+  // Setting the first password: length rule, and no current password needed.
+  assert.equal((await client.put('/api/profile/password', { new_password: 'short' })).status, 400);
+  const set = await client.put('/api/profile/password', { new_password: 'correct horse battery' });
+  assert.equal(set.status, 200);
+  assert.equal(set.body.has_password, true);
+  assert.equal('password_hash' in set.body, false);
+
+  // Stored as a salted scrypt hash, never in plain text; two equal passwords differ.
+  const [row] = await db.query('SELECT password_hash FROM users WHERE id = ?', [user.id]);
+  assert.match(row.password_hash, /^scrypt\$16384\$8\$1\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/);
+  assert.ok(!row.password_hash.includes('correct horse'));
+  const other = await createUser({ email: 'pw.other@xtec.cat', role: 'student' });
+  const otherClient = await login('pw.other@xtec.cat');
+  await otherClient.put('/api/profile/password', { new_password: 'correct horse battery' });
+  const [otherRow] = await db.query('SELECT password_hash FROM users WHERE id = ?', [other.id]);
+  assert.notEqual(otherRow.password_hash, row.password_hash);
+
+  // Sign in with email (any letter case) and password.
+  const good = await attempt('PW.User@xtec.cat', 'correct horse battery');
+  assert.equal(good.res.status, 200);
+  assert.equal(good.res.body.user.email, 'pw.user@xtec.cat');
+  assert.equal(good.res.body.user.role, 'teacher');
+  assert.equal((await good.agent.get('/api/projects')).status, 200);
+  assert.equal((await attempt('pw.user@xtec.cat', 'wrong password')).res.status, 401);
+
+  // Changing it requires the current password.
+  assert.equal((await client.put('/api/profile/password', { new_password: 'another good one' })).status, 403);
+  assert.equal((await client.put('/api/profile/password', { current_password: 'nope', new_password: 'another good one' })).status, 403);
+  assert.equal((await client.put('/api/profile/password', { current_password: 'correct horse battery', new_password: 'another good one' })).status, 200);
+  assert.equal((await attempt('pw.user@xtec.cat', 'correct horse battery')).res.status, 401);
+  assert.equal((await attempt('pw.user@xtec.cat', 'another good one')).res.status, 200);
+
+  // The hash never appears in API responses, and a disabled account is still locked out of data.
+  const admin = await login('admin@xtec.cat');
+  const listed = (await admin.get('/api/users')).body.find((u) => u.id === user.id);
+  assert.equal('password_hash' in listed, false);
+  assert.equal(listed.has_password, true);
+  await admin.patch(`/api/users/${user.id}`, { status: 'disabled' });
+  const disabled = await attempt('pw.user@xtec.cat', 'another good one');
+  assert.equal((await disabled.agent.get('/api/projects')).body.error.code, 'account_disabled');
+
+  // People can change their own name.
+  const renamed = await otherClient.patch('/api/profile', { name: 'Renamed Person' });
+  assert.equal(renamed.body.name, 'Renamed Person');
+});
+
 test('administrator login is locked after repeated failures', async () => {
   const agent = request.agent(app);
   const session = await agent.get('/api/session');
   const post = (password) =>
-    agent.post('/auth/admin-login').set('X-CSRF-Token', session.body.csrf_token).send({ username: 'admin', password });
+    agent.post('/auth/password-login').set('X-CSRF-Token', session.body.csrf_token).send({ username: 'admin', password });
 
   for (let i = 0; i < 5; i += 1) assert.equal((await post('wrong')).status, 401);
   assert.equal((await post('wrong')).status, 429);

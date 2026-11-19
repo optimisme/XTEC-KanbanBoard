@@ -2,6 +2,7 @@ import * as groupService from '../services/groupService.js';
 import * as importService from '../services/importService.js';
 import * as projectService from '../services/projectService.js';
 import * as supervisionService from '../services/supervisionService.js';
+import * as tagService from '../services/tagService.js';
 import * as taskService from '../services/taskService.js';
 import * as v from '../validators/index.js';
 
@@ -45,6 +46,29 @@ export async function addTeacher(req, res) {
 
 export async function setTeachers(req, res) {
   res.json(await projectService.setTeachers(req.user, projectId(req), req.body));
+}
+
+// ---- Tags -----------------------------------------------------------------------
+
+export async function listTags(req, res) {
+  res.json(await tagService.list(req.user, projectId(req)));
+}
+
+export async function tagSuggestions(req, res) {
+  res.json(await tagService.suggestions(req.user, projectId(req)));
+}
+
+export async function createTag(req, res) {
+  res.status(201).json(await tagService.create(req.user, projectId(req), req.body));
+}
+
+export async function updateTag(req, res) {
+  res.json(await tagService.update(req.user, v.id(req.params.tagId, 'etiqueta'), req.body));
+}
+
+export async function deleteTag(req, res) {
+  await tagService.remove(req.user, v.id(req.params.tagId, 'etiqueta'));
+  res.status(204).end();
 }
 
 // ---- Groups ---------------------------------------------------------------------

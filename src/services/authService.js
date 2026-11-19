@@ -3,6 +3,7 @@ import config from '../config/index.js';
 import { db } from '../db/pool.js';
 import * as userRepo from '../repositories/userRepository.js';
 import { HttpError } from '../utils/errors.js';
+import { fakeVerify, verifyPassword } from '../utils/passwords.js';
 
 // Registers or recognises a user from an identity that has already been
 // verified by the identity provider. Never call this with data that comes
@@ -88,6 +89,35 @@ export async function loginLocalAdmin(username, password) {
   });
 }
 
+// Password sign-in. The identifier is the administrator username from .env
+// or the email of an account that has set a password. Returns null when the
+// credentials are wrong, without revealing which part was.
+export async function loginWithPassword(identifier, password) {
+  const admin = await loginLocalAdmin(identifier, password);
+  if (admin) return admin;
+
+  const user = identifier.includes('@') ? await userRepo.findByEmail(db, identifier.toLowerCase()) : null;
+  if (!user || !user.password_hash) {
+    await fakeVerify(password);
+    return null;
+  }
+  if (!(await verifyPassword(password, user.password_hash))) return null;
+  await userRepo.touchLogin(db, user.id);
+  return userRepo.findById(db, user.id);
+}
+
+// The administrator from .env signs in with the password kept there.
+export const isLocalAdmin = (user) => user.oidc_issuer === LOCAL_ADMIN_ISSUER;
+
+// What the browser may know about the signed-in person (never the hash).
 export function publicUser(user) {
-  return { id: user.id, email: user.email, name: user.name, role: user.role, status: user.status };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status,
+    has_password: Boolean(user.password_hash),
+    can_set_password: !isLocalAdmin(user),
+  };
 }

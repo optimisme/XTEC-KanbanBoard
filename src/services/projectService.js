@@ -1,6 +1,6 @@
 import { db } from '../db/pool.js';
 import * as projectRepo from '../repositories/projectRepository.js';
-import * as moduleRepo from '../repositories/moduleRepository.js';
+import * as tagRepo from '../repositories/tagRepository.js';
 import * as groupRepo from '../repositories/groupRepository.js';
 import * as taskRepo from '../repositories/taskRepository.js';
 import * as userRepo from '../repositories/userRepository.js';
@@ -8,6 +8,7 @@ import { badRequest, conflict, notFound } from '../utils/errors.js';
 import { renderMarkdown } from '../utils/markdown.js';
 import * as v from '../validators/index.js';
 import { assertWritable, managerAccess, projectAccess, requireAdmin, requireStaff } from './accessService.js';
+import { assertInstitutionalEmail } from './userService.js';
 
 function parseProject(body) {
   return {
@@ -15,13 +16,6 @@ function parseProject(body) {
     description: v.text(body.description, 'descripció', { max: 10000, required: false }),
     academicYear: v.academicYear(body.academic_year),
   };
-}
-
-async function validModuleIds(t, value) {
-  const moduleIds = v.idArray(value ?? [], 'mòduls');
-  const found = await moduleRepo.findByIds(t, moduleIds);
-  if (found.length !== moduleIds.length) throw badRequest('Algun dels mòduls indicats no existeix.');
-  return moduleIds;
 }
 
 export async function list(user) {
@@ -42,8 +36,8 @@ export async function get(user, projectId, executor = db) {
   const access = await projectAccess(executor, user, projectId);
   const { project } = access;
 
-  const [modules, teachers, groups, members, progress, taskCount] = await Promise.all([
-    moduleRepo.listForProject(executor, projectId),
+  const [tags, teachers, groups, members, progress, taskCount] = await Promise.all([
+    tagRepo.listForProject(executor, projectId),
     projectRepo.teachers(executor, projectId),
     groupRepo.listByProject(executor, projectId),
     groupRepo.membersByProject(executor, projectId),
@@ -60,7 +54,7 @@ export async function get(user, projectId, executor = db) {
     access: access.level,
     can_manage: access.canManage,
     my_group_id: access.groupId,
-    modules,
+    tags,
     teachers,
     task_count: taskCount,
     groups: visibleGroups.map((g) => ({
@@ -77,9 +71,7 @@ export async function create(user, body) {
   requireStaff(user);
   const data = parseProject(body);
   const id = await db.tx(async (t) => {
-    const moduleIds = await validModuleIds(t, body.module_ids);
     const projectId = await projectRepo.create(t, data);
-    await moduleRepo.addToProject(t, projectId, moduleIds);
     if (user.role === 'teacher') await projectRepo.addTeacher(t, projectId, user.id);
     return projectId;
   });
@@ -94,20 +86,6 @@ export async function update(user, projectId, body) {
     if (!project) throw notFound("No s'ha trobat el projecte.");
     assertWritable(project);
     await projectRepo.update(t, projectId, data);
-
-    if (body.module_ids !== undefined) {
-      const wanted = await validModuleIds(t, body.module_ids);
-      const current = (await moduleRepo.listForProject(t, projectId)).map((m) => m.id);
-      await moduleRepo.addToProject(t, projectId, wanted.filter((id) => !current.includes(id)));
-      try {
-        await moduleRepo.removeFromProject(t, projectId, current.filter((id) => !wanted.includes(id)));
-      } catch (err) {
-        if (err.code === 'ER_ROW_IS_REFERENCED_2') {
-          throw conflict('No es pot treure un mòdul que encara tenen assignat algunes tasques.');
-        }
-        throw err;
-      }
-    }
   });
   return get(user, projectId);
 }
@@ -119,22 +97,36 @@ export async function setStatus(user, projectId, status) {
 }
 
 // A project's teachers (and administrators) can bring in another teacher by
-// institutional email. Only existing, active teacher accounts can be added:
-// this never creates an account or turns anyone into a teacher.
+// institutional email. An email without an account creates a teacher account
+// (a name is then required); a pending account is approved as a teacher. An
+// existing student, or a disabled account, is never turned into a teacher.
 export async function addTeacher(user, projectId, body) {
   const email = v.email(body.email);
+  assertInstitutionalEmail(email);
   const { project } = await managerAccess(db, user, projectId);
   assertWritable(project);
-  const teacher = await userRepo.findByEmail(db, email);
-  if (!teacher) {
-    throw notFound(`No hi ha cap compte amb el correu ${email}. Demana a administració que l'afegeixi com a professorat.`);
-  }
-  if (teacher.role !== 'teacher') throw conflict(`${email} no és un compte de professorat.`);
-  if (teacher.status !== 'active') throw conflict(`El compte ${email} no està actiu.`);
-  if (await projectRepo.isTeacher(db, projectId, teacher.id)) {
-    throw conflict(`${teacher.name} ja és professor/a d'aquest projecte.`);
-  }
-  await projectRepo.addTeacher(db, projectId, teacher.id);
+
+  await db.tx(async (t) => {
+    let teacher = await userRepo.findByEmail(t, email);
+    if (!teacher) {
+      if (!body.name || !String(body.name).trim()) {
+        throw badRequest(`${email} encara no té compte: cal indicar-ne el nom per crear-lo.`);
+      }
+      const name = v.text(body.name, 'nom', { max: 200 });
+      const id = await userRepo.create(t, { issuer: null, subject: null, email, name, role: 'teacher', status: 'active' });
+      teacher = { id, name };
+    } else if (teacher.status === 'pending') {
+      await userRepo.update(t, teacher.id, { role: 'teacher', status: 'active' });
+    } else if (teacher.status !== 'active') {
+      throw conflict(`El compte ${email} està desactivat. Contacta amb administració.`);
+    } else if (teacher.role !== 'teacher') {
+      throw conflict(`${email} no és un compte de professorat.`);
+    }
+    if (await projectRepo.isTeacher(t, projectId, teacher.id)) {
+      throw conflict(`${teacher.name} ja és professor/a d'aquest projecte.`);
+    }
+    await projectRepo.addTeacher(t, projectId, teacher.id);
+  });
   return get(user, projectId);
 }
 
@@ -156,7 +148,7 @@ export async function setTeachers(user, projectId, body) {
   return get(user, projectId);
 }
 
-// Copies the reusable definition of a project (modules, shared tasks and
+// Copies the reusable definition of a project (tags, shared tasks and
 // their order) into a new project for another academic year. Teachers,
 // groups, students and every piece of progress are deliberately left behind
 // (a teacher who duplicates a project becomes the teacher of the copy).
@@ -174,11 +166,14 @@ export async function duplicate(user, projectId, body) {
     const id = await projectRepo.create(t, data);
     if (user.role === 'teacher') await projectRepo.addTeacher(t, id, user.id);
 
-    const modules = await moduleRepo.listForProject(t, projectId);
-    await moduleRepo.addToProject(t, id, modules.map((m) => m.id));
+    // Tags are copied with their colors; old tag ids map to the new ones.
+    const newTagId = new Map();
+    for (const tag of await tagRepo.listForProject(t, projectId)) {
+      newTagId.set(tag.id, await tagRepo.create(t, { projectId: id, name: tag.name, color: tag.color, textColor: tag.text_color }));
+    }
 
     const tasks = await taskRepo.listByProject(t, projectId);
-    const taskModules = await moduleRepo.mapForTasks(t, tasks.map((task) => task.id));
+    const taskTags = await tagRepo.mapForTasks(t, tasks.map((task) => task.id));
     let sortOrder = 1;
     for (const task of tasks) {
       const copy = {
@@ -189,13 +184,13 @@ export async function duplicate(user, projectId, body) {
         authorId: user.id,
       };
       const taskId = await taskRepo.create(t, copy);
-      const copiedModules = taskModules.get(task.id);
-      await taskRepo.setModules(t, taskId, id, copiedModules.map((m) => m.id));
+      const copiedTags = taskTags.get(task.id).map((tag) => ({ id: newTagId.get(tag.id), name: tag.name }));
+      await tagRepo.setTaskTags(t, taskId, id, copiedTags.map((tag) => tag.id));
       await taskRepo.insertVersion(t, {
         taskId,
         version: 1,
         ...copy,
-        modules: copiedModules.map((m) => ({ id: m.id, name: m.name })),
+        tags: copiedTags,
         userId: user.id,
       });
     }

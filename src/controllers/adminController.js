@@ -1,4 +1,3 @@
-import * as moduleService from '../services/moduleService.js';
 import * as userService from '../services/userService.js';
 import * as v from '../validators/index.js';
 
@@ -13,7 +12,15 @@ export async function createUser(req, res) {
 }
 
 export async function lookupStudent(req, res) {
-  res.json(await userService.lookupStudent(req.body));
+  res.json(await userService.lookupPerson(req.body, 'student'));
+}
+
+export async function lookupTeacher(req, res) {
+  res.json(await userService.lookupPerson(req.body, 'teacher'));
+}
+
+export async function setPassword(req, res) {
+  res.json(await userService.setOwnPassword(req.user, req.body));
 }
 
 export async function updateUser(req, res) {
@@ -33,21 +40,3 @@ export async function updateProfile(req, res) {
   res.json(await userService.updateOwnProfile(req.user, req.body));
 }
 
-// ---- Professional modules -----------------------------------------------------
-
-export async function listModules(req, res) {
-  res.json(await moduleService.list());
-}
-
-export async function createModule(req, res) {
-  res.status(201).json(await moduleService.create(req.body));
-}
-
-export async function updateModule(req, res) {
-  res.json(await moduleService.update(v.id(req.params.id), req.body));
-}
-
-export async function deleteModule(req, res) {
-  await moduleService.remove(v.id(req.params.id));
-  res.status(204).end();
-}

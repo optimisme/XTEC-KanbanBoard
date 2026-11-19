@@ -17,6 +17,7 @@ router.get('/session', auth.session);
 router.use(requireActive);
 
 router.patch('/profile', admin.updateProfile);
+router.put('/profile/password', admin.setPassword);
 
 // Users
 router.get('/users', adminOnly, admin.listUsers);
@@ -25,14 +26,16 @@ router.patch('/users/:id', adminOnly, admin.updateUser);
 router.post('/users/:id/approve', adminOnly, admin.approveUser);
 router.post('/users/:id/reject', adminOnly, admin.rejectUser);
 
-// Used by teachers and administrators when adding students to a group by email.
+// Used by teachers and administrators when adding people by email.
 router.post('/students/lookup', staffOnly, admin.lookupStudent);
+router.post('/teachers/lookup', staffOnly, admin.lookupTeacher);
 
-// Professional modules
-router.get('/modules', staffOnly, admin.listModules);
-router.post('/modules', adminOnly, admin.createModule);
-router.put('/modules/:id', adminOnly, admin.updateModule);
-router.delete('/modules/:id', adminOnly, admin.deleteModule);
+// Project tags
+router.get('/projects/:projectId/tags', projects.listTags);
+router.get('/projects/:projectId/tags/suggestions', projects.tagSuggestions);
+router.post('/projects/:projectId/tags', projects.createTag);
+router.put('/tags/:tagId', projects.updateTag);
+router.delete('/tags/:tagId', projects.deleteTag);
 
 // Projects
 router.get('/projects', projects.list);

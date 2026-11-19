@@ -59,25 +59,17 @@ export async function setSortOrder(db, id, sortOrder) {
   await db.query('UPDATE task_definitions SET sort_order = ? WHERE id = ?', [sortOrder, id]);
 }
 
-export async function setModules(db, taskId, projectId, moduleIds) {
-  await db.query('DELETE FROM task_modules WHERE task_id = ?', [taskId]);
-  if (moduleIds.length === 0) return;
-  await db.query('INSERT INTO task_modules (task_id, project_id, module_id) VALUES ?', [
-    moduleIds.map((moduleId) => [taskId, projectId, moduleId]),
-  ]);
-}
-
-export async function insertVersion(db, { taskId, version, title, description, modules, userId }) {
+export async function insertVersion(db, { taskId, version, title, description, tags, userId }) {
   await db.query(
-    `INSERT INTO task_versions (task_id, version, title, description, modules, modified_by)
+    `INSERT INTO task_versions (task_id, version, title, description, tags, modified_by)
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [taskId, version, title, description, JSON.stringify(modules), userId]
+    [taskId, version, title, description, JSON.stringify(tags), userId]
   );
 }
 
 export function versions(db, taskId) {
   return db.query(
-    `SELECT tv.id, tv.task_id, tv.version, tv.title, tv.description, tv.modules,
+    `SELECT tv.id, tv.task_id, tv.version, tv.title, tv.description, tv.tags,
             tv.modified_by, u.name AS modified_by_name, tv.created_at
        FROM task_versions tv JOIN users u ON u.id = tv.modified_by
       WHERE tv.task_id = ? ORDER BY tv.version DESC`,

@@ -1,23 +1,19 @@
 // Shared task definitions: editor, read-only view, version history and the
 // initial Markdown import.
 import { api } from '../api.js';
-import { append, checkList, clear, field, formatDateTime, h, modal, moduleChip, moduleChips, run, toast } from '../ui.js';
+import { append, clear, field, formatDateTime, h, modal, run, tagChip, tagChips, tagPicker, toast } from '../ui.js';
 
 // Create (taskId omitted) or edit a shared task definition.
 export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
-  const [project, task] = await Promise.all([
-    api.get(`/api/projects/${projectId}`),
+  const [suggestions, task] = await Promise.all([
+    api.get(`/api/projects/${projectId}/tags/suggestions`),
     taskId ? api.get(`/api/tasks/${taskId}`) : null,
   ]);
 
   const title = h('input', { type: 'text', maxlength: '200', required: true, value: task ? task.title : '' });
   const description = h('textarea', { class: 'code', rows: '14' });
   description.value = task ? task.description : '';
-  const moduleList = checkList(
-    project.modules.map((m) => ({ id: m.id, chip: moduleChip(m) })),
-    task ? task.modules.map((m) => m.id) : [],
-    { emptyText: 'El projecte encara no té mòduls associats.' }
-  );
+  const tags = tagPicker(task ? task.tags : [], suggestions);
   const save = h('button', { class: 'btn primary', type: 'submit' }, task ? 'Desa els canvis' : 'Crea la tasca');
 
   const form = h(
@@ -29,7 +25,7 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
           const body = {
             title: title.value,
             description: description.value,
-            module_ids: moduleList.values(),
+            tags: tags.values(),
           };
           const saved = task ? await api.put(`/api/tasks/${task.id}`, body) : await api.post(`/api/projects/${projectId}/tasks`, body);
           dialog.close();
@@ -43,7 +39,8 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
       : h('div', { class: 'notice' }, 'La tasca s\'afegirà al final de la llista i apareixerà com a pendent a tots els grups.'),
     field('Títol', title),
     field('Descripció', description, 'Admet Markdown: títols, llistes, enllaços, imatges i blocs de codi.'),
-    h('div', { class: 'field' }, h('label', {}, 'Mòduls professionals (almenys un)'), moduleList.el),
+    h('div', { class: 'field' }, h('label', {}, 'Etiquetes (opcional)'), tags.el,
+      h('div', { class: 'hint' }, "Tria'n de suggerides o escriu-ne una de nova; es crea en desar la tasca.")),
     h('div', { class: 'card-actions' }, save)
   );
   const dialog = modal({ title: task ? 'Edita la tasca compartida' : 'Nova tasca compartida', body: form, wide: true });
@@ -58,7 +55,7 @@ export async function openVersions(taskId) {
         v.current ? h('span', { class: 'tag', style: { 'margin-left': '8px' } }, 'Actual') : null,
         h('span', { class: 'muted' }, ` · ${v.modified_by_name} · ${formatDateTime(v.created_at)}`)),
       h('h3', { style: { margin: '12px 0 6px' } }, v.title),
-      h('div', { class: 'chips', style: { 'margin-bottom': '10px' } }, v.modules.map((m) => h('span', { class: 'tag' }, m.name))),
+      h('div', { class: 'chips', style: { 'margin-bottom': '10px' } }, v.tags.map((tag) => h('span', { class: 'tag' }, tag.name))),
       h('div', { class: 'section-title' }, 'Descripció'),
       v.description_html ? h('div', { class: 'markdown', html: v.description_html }) : h('p', { class: 'muted' }, 'Sense descripció.'))));
   modal({ title: 'Historial de versions', body, wide: true });
@@ -69,7 +66,7 @@ export async function openDefinition(taskId, { canManage, writable, onChanged })
   const task = await api.get(`/api/tasks/${taskId}`);
   const body = h('div', {},
     h('div', { class: 'detail-meta' },
-      moduleChips(task.modules),
+      tagChips(task.tags),
       h('span', { class: 'muted' }, `Versió ${task.version} · ${task.author.name} · ${formatDateTime(task.updated_at)}`)),
     h('h3', { class: 'section-title' }, 'Descripció'),
     task.description_html ? h('div', { class: 'box markdown', html: task.description_html }) : h('p', { class: 'muted' }, 'Sense descripció.'));
@@ -90,7 +87,7 @@ export async function openDefinition(taskId, { canManage, writable, onChanged })
 
 // Initial Markdown import: paste or load a file, preview, then import.
 export function openImport({ project, onDone }) {
-  const text = h('textarea', { class: 'code', rows: '14', required: true, placeholder: '## Títol de la tasca\n\n**Modules:** …' });
+  const text = h('textarea', { class: 'code', rows: '14', required: true, placeholder: '## Títol de la tasca\n\n**Tags:** …' });
   const file = h('input', { type: 'file', accept: '.md,.markdown,.txt,text/markdown,text/plain', 'aria-label': 'Fitxer Markdown' });
   file.addEventListener('change', async () => {
     if (file.files[0]) text.value = await file.files[0].text();
@@ -117,12 +114,14 @@ export function openImport({ project, onDone }) {
       preview.tasks.length
         ? h('div', { class: 'table-wrap' },
             h('table', {},
-              h('thead', {}, h('tr', {}, h('th', {}, 'Ordre'), h('th', {}, 'Tasca'), h('th', {}, 'Mòduls'))),
+              h('thead', {}, h('tr', {}, h('th', {}, 'Ordre'), h('th', {}, 'Tasca'), h('th', {}, 'Etiquetes'))),
               h('tbody', {}, preview.tasks.map((t) =>
                 h('tr', {},
                   h('td', { class: 'num' }, String(t.order)),
                   h('td', {}, t.title || h('em', {}, '(sense títol)')),
-                  h('td', {}, t.modules.length ? moduleChips(t.modules) : h('span', { class: 'muted' }, t.module_names.join(', ') || '—')))))))
+                  h('td', {}, t.tags.length
+                    ? h('div', { class: 'chips' }, t.tags.map((tag) => (tag.is_new ? h('span', { class: 'tag' }, `${tag.name} (nova)`) : tagChip(tag))))
+                    : h('span', { class: 'muted' }, '—')))))))
         : null
     );
   }));

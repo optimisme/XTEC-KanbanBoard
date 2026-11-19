@@ -1,14 +1,15 @@
 import { db } from '../db/pool.js';
 import * as projectRepo from '../repositories/projectRepository.js';
-import * as moduleRepo from '../repositories/moduleRepository.js';
+import * as tagRepo from '../repositories/tagRepository.js';
 import * as taskRepo from '../repositories/taskRepository.js';
 import * as groupTaskRepo from '../repositories/groupTaskRepository.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import { renderMarkdown } from '../utils/markdown.js';
 import * as v from '../validators/index.js';
 import { assertWritable, managerAccess, projectAccess } from './accessService.js';
+import { resolveNames } from './tagService.js';
 
-export function presentTask(task, modules, { html = false } = {}) {
+export function presentTask(task, tags, { html = false } = {}) {
   return {
     id: task.id,
     project_id: task.project_id,
@@ -17,43 +18,31 @@ export function presentTask(task, modules, { html = false } = {}) {
     sort_order: task.sort_order,
     version: task.version,
     author: { id: task.author_id, name: task.author_name },
-    modules,
+    tags,
     created_at: task.created_at,
     updated_at: task.updated_at,
     ...(html ? { description_html: renderMarkdown(task.description) } : {}),
   };
 }
 
+// `tags` is a list of tag names; a task may have none. Names that the project
+// does not have yet are created when the task is saved.
 function parseTask(body) {
   return {
     title: v.text(body.title, 'títol', { max: 200 }),
     description: v.text(body.description, 'descripció', { max: 100000, required: false }),
-    // A task belongs to one or more modules of its project.
-    moduleIds: v.idArray(body.module_ids, 'mòduls', { min: 1 }),
+    tagNames: body.tags,
   };
 }
 
-async function projectModulesFor(t, projectId, moduleIds) {
-  const projectModules = await moduleRepo.listForProject(t, projectId);
-  const selected = projectModules.filter((m) => moduleIds.includes(m.id));
-  if (selected.length !== moduleIds.length) {
-    throw badRequest('Els mòduls de la tasca han de ser mòduls associats al projecte.');
-  }
-  return selected;
-}
+const snapshot = (tags) => tags.map((tag) => ({ id: tag.id, name: tag.name }));
 
 // Inserts one shared task and its instance in every existing group. Must run
 // inside a transaction that holds the project lock.
-export async function insertTask(t, { projectId, userId, data, modules, sortOrder }) {
+export async function insertTask(t, { projectId, userId, data, tags, sortOrder }) {
   const taskId = await taskRepo.create(t, { projectId, ...data, sortOrder, authorId: userId });
-  await taskRepo.setModules(t, taskId, projectId, modules.map((m) => m.id));
-  await taskRepo.insertVersion(t, {
-    taskId,
-    version: 1,
-    ...data,
-    modules: modules.map((m) => ({ id: m.id, name: m.name })),
-    userId,
-  });
+  await tagRepo.setTaskTags(t, taskId, projectId, tags.map((tag) => tag.id));
+  await taskRepo.insertVersion(t, { taskId, version: 1, ...data, tags: snapshot(tags), userId });
   await groupTaskRepo.createForTask(t, taskId, projectId);
   return taskId;
 }
@@ -61,8 +50,8 @@ export async function insertTask(t, { projectId, userId, data, modules, sortOrde
 export async function list(user, projectId) {
   await projectAccess(db, user, projectId);
   const tasks = await taskRepo.listByProject(db, projectId);
-  const modules = await moduleRepo.mapForTasks(db, tasks.map((t) => t.id));
-  return tasks.map((task) => presentTask(task, modules.get(task.id)));
+  const tags = await tagRepo.mapForTasks(db, tasks.map((t) => t.id));
+  return tasks.map((task) => presentTask(task, tags.get(task.id)));
 }
 
 async function loadTask(executor, taskId) {
@@ -74,8 +63,8 @@ async function loadTask(executor, taskId) {
 export async function get(user, taskId) {
   const task = await loadTask(db, taskId);
   await projectAccess(db, user, task.project_id);
-  const modules = await moduleRepo.mapForTasks(db, [task.id]);
-  return presentTask(task, modules.get(task.id), { html: true });
+  const tags = await tagRepo.mapForTasks(db, [task.id]);
+  return presentTask(task, tags.get(task.id), { html: true });
 }
 
 // New tasks are appended at the end of the global order and appear in every
@@ -87,12 +76,12 @@ export async function create(user, projectId, body) {
     if (!project) throw notFound("No s'ha trobat el projecte.");
     await managerAccess(t, user, projectId);
     assertWritable(project);
-    const modules = await projectModulesFor(t, projectId, data.moduleIds);
+    const tags = await resolveNames(t, projectId, data.tagNames);
     return insertTask(t, {
       projectId,
       userId: user.id,
       data,
-      modules,
+      tags,
       sortOrder: await taskRepo.nextSortOrder(t, projectId),
     });
   });
@@ -110,26 +99,17 @@ export async function update(user, taskId, body) {
     assertWritable(project);
 
     const task = await loadTask(t, taskId);
-    const modules = await projectModulesFor(t, task.project_id, data.moduleIds);
-    const currentModuleIds = (await moduleRepo.mapForTasks(t, [taskId])).get(taskId).map((m) => m.id);
-    const sameModules =
-      currentModuleIds.length === data.moduleIds.length && currentModuleIds.every((id) => data.moduleIds.includes(id));
-    const changed =
-      task.title !== data.title ||
-      task.description !== data.description ||
-      !sameModules;
+    const tags = await resolveNames(t, task.project_id, data.tagNames);
+    const tagIds = tags.map((tag) => tag.id);
+    const currentTagIds = (await tagRepo.mapForTasks(t, [taskId])).get(taskId).map((tag) => tag.id);
+    const sameTags = currentTagIds.length === tagIds.length && currentTagIds.every((id) => tagIds.includes(id));
+    const changed = task.title !== data.title || task.description !== data.description || !sameTags;
     if (!changed) return;
 
     const version = task.version + 1;
     await taskRepo.update(t, taskId, { ...data, version });
-    await taskRepo.setModules(t, taskId, task.project_id, data.moduleIds);
-    await taskRepo.insertVersion(t, {
-      taskId,
-      version,
-      ...data,
-      modules: modules.map((m) => ({ id: m.id, name: m.name })),
-      userId: user.id,
-    });
+    await tagRepo.setTaskTags(t, taskId, task.project_id, tagIds);
+    await taskRepo.insertVersion(t, { taskId, version, ...data, tags: snapshot(tags), userId: user.id });
   });
   return get(user, taskId);
 }
@@ -169,7 +149,7 @@ export async function versions(user, taskId) {
   const rows = await taskRepo.versions(db, taskId);
   return rows.map((row) => ({
     ...row,
-    modules: typeof row.modules === 'string' ? JSON.parse(row.modules) : row.modules,
+    tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags,
     description_html: renderMarkdown(row.description),
     current: row.version === task.version,
   }));

@@ -6,7 +6,7 @@ import { conflict, forbidden, notFound } from '../utils/errors.js';
 // Central authorization rules. Every service resolves access through these
 // functions, so the rules live in exactly one place:
 //   admin   -> every project
-//   teacher -> projects listed in project_teachers (never by module); a
+//   teacher -> projects listed in project_teachers (tags never matter); a
 //              teacher manages those projects fully and can create new ones
 //   student -> only their own group inside a project
 

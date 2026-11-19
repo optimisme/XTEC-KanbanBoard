@@ -1,6 +1,6 @@
 // Project listing ("Els meus projectes") and the project create/edit form.
 import { api } from '../api.js';
-import { append, checkList, field, h, modal, moduleChip, run } from '../ui.js';
+import { append, field, h, modal, run } from '../ui.js';
 
 function defaultAcademicYear() {
   const now = new Date();
@@ -10,7 +10,6 @@ function defaultAcademicYear() {
 
 // Modal form used both to create and to edit a project.
 export async function openProjectForm({ project = null, onSaved }) {
-  const modules = await api.get('/api/modules');
   const name = h('input', { type: 'text', maxlength: '200', required: true, value: project ? project.name : '' });
   const year = h('input', {
     type: 'text', required: true, pattern: '\\d{4}-(\\d{2}|\\d{4})', placeholder: '2026-2027',
@@ -18,11 +17,6 @@ export async function openProjectForm({ project = null, onSaved }) {
   });
   const description = h('textarea', { rows: '4' });
   description.value = project ? project.description || '' : '';
-  const moduleList = checkList(
-    modules.map((m) => ({ id: m.id, chip: moduleChip(m) })),
-    project ? project.modules.map((m) => m.id) : [],
-    { emptyText: 'Encara no hi ha mòduls. Crea\'ls a «Mòduls».' }
-  );
   const save = h('button', { class: 'btn primary', type: 'submit' }, project ? 'Desa els canvis' : 'Crea el projecte');
 
   const form = h(
@@ -35,7 +29,6 @@ export async function openProjectForm({ project = null, onSaved }) {
             name: name.value,
             academic_year: year.value,
             description: description.value,
-            module_ids: moduleList.values(),
           };
           const saved = project
             ? await api.put(`/api/projects/${project.id}`, body)
@@ -48,7 +41,6 @@ export async function openProjectForm({ project = null, onSaved }) {
     field('Nom', name),
     field('Curs acadèmic', year, 'Format: 2026-2027'),
     field('Descripció (opcional, admet Markdown)', description),
-    h('div', { class: 'field' }, h('label', {}, 'Mòduls professionals del projecte'), moduleList.el),
     h('div', { class: 'card-actions' }, save)
   );
   const dialog = modal({ title: project ? 'Edita el projecte' : 'Nou projecte', body: form });

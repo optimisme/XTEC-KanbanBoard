@@ -2,7 +2,7 @@
 // blocking events and activity history.
 import { api } from '../api.js';
 import {
-  append, avatar, clear, EVENT_LABELS, formatDateTime, formatDuration, h, icon, modal, moduleChips,
+  append, avatar, clear, EVENT_LABELS, formatDateTime, formatDuration, h, icon, modal, tagChips,
   promptDialog, run, secondsSince, STATUS_LABELS, statusBadge, toast,
 } from '../ui.js';
 
@@ -209,7 +209,7 @@ export async function openTaskModal(groupTaskId, { onChange = () => {} } = {}) {
     append(clear(content),
       h('div', { class: 'detail-meta' },
         h('span', { class: 'muted' }, `${task.project.name} · Grup ${task.group.group_number}`),
-        moduleChips(task.modules)),
+        tagChips(task.tags)),
       h('div', { class: 'detail-layout' },
         h('div', { class: 'detail-main' },
           h('div', { class: 'subtabs', role: 'tablist' }, tabs.map(([key, label]) =>

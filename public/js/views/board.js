@@ -2,7 +2,7 @@
 // "move to" control on every card. Cards always follow the global task order.
 import { api } from '../api.js';
 import {
-  append, avatar, clear, formatDateTime, h, icon, moduleChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
+  append, avatar, clear, formatDateTime, h, icon, tagChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
 } from '../ui.js';
 import { changeTaskStatus, openTaskModal } from './taskModal.js';
 
@@ -48,7 +48,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
 
     const el = h('article', { class: `task-card ${task.status}`, draggable: canMove ? 'true' : null },
       h('button', { class: 'task-title', type: 'button', onClick: () => openTask(task.id) }, task.title),
-      moduleChips(task.modules),
+      tagChips(task.tags),
       task.status === 'blocked' && task.block_reason
         ? h('div', { class: 'block-reason', title: task.block_reason }, icon('blocked'),
             h('span', {}, h('span', { class: 'sr-only' }, 'Motiu del bloqueig: '), task.block_reason))

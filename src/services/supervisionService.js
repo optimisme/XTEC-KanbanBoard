@@ -1,6 +1,6 @@
 import { db } from '../db/pool.js';
 import * as groupRepo from '../repositories/groupRepository.js';
-import * as moduleRepo from '../repositories/moduleRepository.js';
+import * as tagRepo from '../repositories/tagRepository.js';
 import * as supervisionRepo from '../repositories/supervisionRepository.js';
 import * as taskRepo from '../repositories/taskRepository.js';
 import * as userRepo from '../repositories/userRepository.js';
@@ -9,21 +9,21 @@ import * as v from '../validators/index.js';
 import { managerAccess } from './accessService.js';
 
 // Progress matrix: one row per group, one column per shared task (in the
-// global order), optionally filtered by professional module.
+// global order), optionally filtered by tag.
 export async function matrix(user, projectId, query) {
-  const moduleId = v.optionalId(query.module_id, 'mòdul');
+  const tagId = v.optionalId(query.tag_id, 'etiqueta');
   const { project } = await managerAccess(db, user, projectId);
 
-  const [allTasks, groups, members, cells, modules] = await Promise.all([
+  const [allTasks, groups, members, cells, tags] = await Promise.all([
     taskRepo.listByProject(db, projectId),
     groupRepo.listByProject(db, projectId),
     groupRepo.membersByProject(db, projectId),
     supervisionRepo.matrixCells(db, projectId),
-    moduleRepo.listForProject(db, projectId),
+    tagRepo.listForProject(db, projectId),
   ]);
-  const taskModules = await moduleRepo.mapForTasks(db, allTasks.map((t) => t.id));
+  const taskTags = await tagRepo.mapForTasks(db, allTasks.map((t) => t.id));
   const tasks = allTasks.filter(
-    (task) => moduleId === null || taskModules.get(task.id).some((m) => m.id === moduleId)
+    (task) => tagId === null || taskTags.get(task.id).some((tag) => tag.id === tagId)
   );
 
   const byGroup = new Map(groups.map((g) => [g.id, {}]));
@@ -37,12 +37,12 @@ export async function matrix(user, projectId, query) {
 
   return {
     project: { id: project.id, name: project.name, status: project.status },
-    modules,
+    tags,
     tasks: tasks.map((task, index) => ({
       id: task.id,
       position: index + 1,
       title: task.title,
-      modules: taskModules.get(task.id),
+      tags: taskTags.get(task.id),
     })),
     groups: groups.map((g) => ({
       id: g.id,
