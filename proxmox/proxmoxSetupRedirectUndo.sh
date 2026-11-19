@@ -11,7 +11,6 @@ source "$SCRIPT_DIR/config.env"
 
 USER=${1:-$DEFAULT_USER}
 RSA_PATH=${2:-"$DEFAULT_RSA_PATH"}
-SERVER_PORT=${3:-$DEFAULT_SERVER_PORT}  # not required; we remove ALL 80 redirects
 RSA_PATH="${RSA_PATH%$'\r'}"
 SSH_OPTS='-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa'
 
@@ -20,11 +19,8 @@ echo "RSA:  $RSA_PATH"
 
 [[ -f "$RSA_PATH" ]] || { echo "Error: no troba la clau: $RSA_PATH"; exit 1; }
 
-# read -s -p "Pwd sudo remota: " SUDO_PASSWORD
-# echo
-
-# Escape password safely for embedding
-# ESC_PWD=$(printf "%q" "$SUDO_PASSWORD")
+# The deploy user runs sudo without a password, so an empty line is all that
+# "sudo -S" reads below.
 ESC_PWD="\n"
 
 eval "$(ssh-agent -s)" >/dev/null

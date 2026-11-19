@@ -91,6 +91,12 @@ export function createApp() {
   );
 
   app.use(express.json({ limit: '1mb' }));
+  // A request without a JSON object as its body is handled as an empty one,
+  // so a missing field is reported as a validation error, not as a crash.
+  app.use((req, res, next) => {
+    if (req.body === null || typeof req.body !== 'object' || Array.isArray(req.body)) req.body = {};
+    next();
+  });
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

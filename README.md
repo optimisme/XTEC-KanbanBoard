@@ -394,7 +394,16 @@ with their email and that password.
   not be safe for this.
 - The minimum length is 8 characters. Changing a password requires the
   current one.
-- After 5 failed sign-in attempts an address is locked out for 15 minutes.
+- After 5 failed sign-in attempts for one account, that account is locked for
+  the address they came from for 15 minutes. Other people behind the same
+  address (a whole school often shares one) can still sign in; an address
+  that keeps failing with many different accounts is locked as a whole.
+- Setting or changing a password ends the person's other open sessions.
+- An administrator can remove a person's password in **Usuaris** (*Treu la
+  contrasenya*), which also ends their open sessions. Use it for a forgotten
+  password, or when someone must only come in through the institutional
+  account again: a password keeps working even after the institution closes
+  that account, until it is removed here or the account is disabled.
 - A person must sign in once (institutional account) before they can set a
   password; there is no "forgot my password" email.
 
@@ -499,7 +508,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 | Area | Endpoints |
 |---|---|
 | Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/password-login`, `POST /auth/logout`, `GET /api/session` |
-| Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PUT /api/profile/password`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
+| Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PUT /api/profile/password`, `DELETE /api/users/:id/password`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
 | Tags | `GET/POST /api/projects/:id/tags`, `GET /api/projects/:id/tags/suggestions`, `PUT/DELETE /api/tags/:id` |
 | Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `DELETE /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers`, `DELETE …/teachers/:userId` |
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |

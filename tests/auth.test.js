@@ -231,6 +231,73 @@ test('administrator login is locked after repeated failures', async () => {
   assert.equal(locked.body.error.code, 'too_many_attempts');
 });
 
+const passwordAttempt = async (body) => {
+  const agent = request.agent(app);
+  const session = await agent.get('/api/session');
+  const post = agent.post('/auth/password-login').set('X-CSRF-Token', session.body.csrf_token);
+  return { res: await (body === undefined ? post : post.send(body)), agent };
+};
+
+test('a locked account does not lock other people behind the same address', async () => {
+  await createUser({ email: 'lock.one@xtec.cat', name: 'Lock One' });
+  await createUser({ email: 'lock.two@xtec.cat', name: 'Lock Two' });
+  await (await login('lock.one@xtec.cat')).put('/api/profile/password', { new_password: 'first good password' });
+  await (await login('lock.two@xtec.cat')).put('/api/profile/password', { new_password: 'second good password' });
+
+  for (let i = 0; i < 5; i += 1) {
+    assert.equal((await passwordAttempt({ username: 'lock.one@xtec.cat', password: 'wrong' })).res.status, 401);
+  }
+  // The same account in another letter case is the same account.
+  assert.equal((await passwordAttempt({ username: 'LOCK.ONE@xtec.cat', password: 'first good password' })).res.status, 429);
+  assert.equal((await passwordAttempt({ username: 'lock.two@xtec.cat', password: 'second good password' })).res.status, 200);
+});
+
+test('attempts sent at the same time cannot exceed the limit', async () => {
+  await createUser({ email: 'burst@xtec.cat', name: 'Burst' });
+  await (await login('burst@xtec.cat')).put('/api/profile/password', { new_password: 'a password nobody guesses' });
+  const results = await Promise.all(
+    Array.from({ length: 12 }, () => passwordAttempt({ username: 'burst@xtec.cat', password: 'guess' }))
+  );
+  const statuses = results.map((r) => r.res.status);
+  assert.equal(statuses.filter((s) => s === 401).length, 5);
+  assert.equal(statuses.filter((s) => s === 429).length, 7);
+});
+
+test('a request without a body is a client error, never a server error', async () => {
+  assert.equal((await passwordAttempt(undefined)).res.status, 401);
+  await createUser({ email: 'nobody.admin@xtec.cat', name: 'Body Admin', role: 'admin' });
+  const target = await createUser({ email: 'nobody.pending@xtec.cat', name: 'Body Pending', status: 'pending' });
+  const admin = await login('nobody.admin@xtec.cat');
+  const noBody = (method, url) => admin.agent[method](url).set('X-CSRF-Token', admin.token);
+  assert.equal((await noBody('post', '/api/projects')).status, 400);
+  assert.equal((await noBody('put', '/api/profile/password')).status, 400);
+  assert.equal((await noBody('post', `/api/users/${target.id}/approve`)).status, 200);
+});
+
+test('changing or removing a password ends the other sessions', async () => {
+  const user = await createUser({ email: 'sessions@xtec.cat', name: 'Sessions' });
+  await createUser({ email: 'sessions.admin@xtec.cat', name: 'Sessions Admin', role: 'admin' });
+  const first = await login('sessions@xtec.cat');
+  const second = await login('sessions@xtec.cat');
+  const admin = await login('sessions.admin@xtec.cat');
+
+  // The session that changes the password stays; the other one is closed.
+  assert.equal((await first.put('/api/profile/password', { new_password: 'a brand new password' })).status, 200);
+  assert.equal((await first.get('/api/projects')).status, 200);
+  assert.equal((await second.get('/api/projects')).status, 401);
+  assert.equal((await admin.get('/api/projects')).status, 200);
+
+  // Only administrators remove a password; afterwards it no longer signs in.
+  assert.equal((await first.del(`/api/users/${user.id}/password`)).status, 403);
+  const cleared = await admin.del(`/api/users/${user.id}/password`);
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.body.has_password, false);
+  assert.equal((await first.get('/api/projects')).status, 401);
+  assert.equal((await passwordAttempt({ username: 'sessions@xtec.cat', password: 'a brand new password' })).res.status, 401);
+  assert.equal((await admin.del(`/api/users/${user.id}/password`)).status, 409);
+  assert.equal((await admin.get('/api/projects')).status, 200);
+});
+
 test('users added in advance by email sign in without approval', async () => {
   const admin = await login('admin@xtec.cat');
   const created = await admin.post('/api/users', { name: 'Pre Teacher', email: 'Pre.Teacher@xtec.cat', role: 'teacher' });

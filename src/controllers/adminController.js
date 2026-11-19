@@ -28,7 +28,11 @@ export async function suggestTeachers(req, res) {
 }
 
 export async function setPassword(req, res) {
-  res.json(await userService.setOwnPassword(req.user, req.body));
+  res.json(await userService.setOwnPassword(req.user, req.body, req.sessionID));
+}
+
+export async function clearPassword(req, res) {
+  res.json(await userService.clearPassword(req.user, v.id(req.params.id), req.sessionID));
 }
 
 export async function updateUser(req, res) {

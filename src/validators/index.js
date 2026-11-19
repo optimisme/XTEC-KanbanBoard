@@ -57,20 +57,6 @@ export function academicYear(value) {
   return cleaned;
 }
 
-export function httpUrl(value, field = 'url', { max = 1000 } = {}) {
-  const cleaned = text(value, field, { max });
-  let parsed;
-  try {
-    parsed = new URL(cleaned);
-  } catch {
-    throw badRequest(`El camp «${field}» ha de ser una URL vàlida.`);
-  }
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw badRequest(`El camp «${field}» ha de ser una URL http o https.`);
-  }
-  return parsed.href;
-}
-
 const GITHUB_REPO = /^https:\/\/github\.com\/[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}\/?$/;
 
 // Returns a normalized repository URL, or null to clear it.

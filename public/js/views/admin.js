@@ -1,7 +1,7 @@
 // Administrator screen: user management (with pending approvals).
 import { api } from '../api.js';
 import {
-  append, clear, field, formatDate, h, modal, promptDialog, ROLE_LABELS, run, toast,
+  append, clear, confirmDialog, field, formatDate, h, modal, promptDialog, ROLE_LABELS, run, toast,
   USER_STATUS_LABELS,
 } from '../ui.js';
 
@@ -84,13 +84,30 @@ export async function renderUsers(view, params, { user: me }) {
               // The administrator's own name is also shown in the top bar.
               if (self) window.location.reload();
             });
+            // Only for accounts that have set a password.
+            const clearPassword = u.has_password ? h('button', { class: 'btn small', type: 'button' }, 'Treu la contrasenya') : null;
+            if (clearPassword) {
+              clearPassword.addEventListener('click', async () => {
+                const ok = await confirmDialog({
+                  title: 'Treu la contrasenya',
+                  message: `${u.name} deixarà de poder entrar amb correu i contrasenya i se li tancaran les sessions obertes. Podrà continuar entrant amb el compte institucional i definir-ne una de nova.`,
+                  confirmLabel: 'Treu la contrasenya',
+                  danger: true,
+                });
+                if (!ok) return;
+                await act(clearPassword, async () => {
+                  await api.del(`/api/users/${u.id}/password`);
+                  toast('Contrasenya treta.');
+                });
+              });
+            }
             return h('tr', {},
               h('td', {}, u.name, self ? h('span', { class: 'tag', style: { 'margin-left': '8px' } }, 'Tu') : null),
               h('td', { class: 'muted' }, u.email),
               h('td', {}, role),
               h('td', {}, h('span', { class: 'tag' }, USER_STATUS_LABELS[u.status])),
               h('td', { class: 'muted' }, u.last_login_at ? formatDate(u.last_login_at) : 'Encara no ha entrat'),
-              h('td', { class: 'actions' }, rename, toggle));
+              h('td', { class: 'actions' }, rename, clearPassword, toggle));
           })))));
   }
 

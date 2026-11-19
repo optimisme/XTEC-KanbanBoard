@@ -89,11 +89,19 @@ export async function devLogin(req, res) {
   res.json({ user: authService.publicUser(user), csrf_token: csrfToken(req) });
 }
 
-// Failed password logins per client address: after MAX_FAILURES the
-// address must wait until the window ends. Kept in memory on purpose; it only
-// needs to slow down password guessing.
+// Password guessing is slowed down with two counters of failed logins, kept
+// in memory on purpose:
+//   - per client address and account: MAX_FAILURES wrong passwords lock that
+//     account for that address. A whole school often shares one address, so
+//     one person's mistakes must not lock everybody else out;
+//   - per client address: a much higher limit that stops one address from
+//     trying many different accounts.
+// An attempt is counted before the password is checked, so requests sent at
+// the same time cannot all slip under the limit.
 const MAX_FAILURES = 5;
+const MAX_FAILURES_PER_ADDRESS = 50;
 const FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const MAX_TRACKED = 10000;
 const failures = new Map();
 
 function failureEntry(key) {
@@ -103,26 +111,47 @@ function failureEntry(key) {
   return null;
 }
 
+function countAttempt(key) {
+  let entry = failureEntry(key);
+  if (!entry) {
+    // Forget expired entries before the map can grow without limit.
+    if (failures.size >= MAX_TRACKED) {
+      const now = Date.now();
+      for (const [k, e] of failures) if (e.resetAt <= now) failures.delete(k);
+    }
+    entry = { count: 0, resetAt: Date.now() + FAILURE_WINDOW_MS };
+    failures.set(key, entry);
+  }
+  entry.count += 1;
+}
+
+function forgetAttempt(key) {
+  const entry = failureEntry(key);
+  if (entry) entry.count -= 1;
+}
+
+const isLocked = (key, max) => (failureEntry(key)?.count ?? 0) >= max;
+
 // POST /auth/password-login — the administrator from .env (username) or any
 // account that has set a password (email).
 export async function passwordLogin(req, res) {
-  const key = req.ip;
-  const entry = failureEntry(key);
-  if (entry && entry.count >= MAX_FAILURES) {
-    throw new HttpError(429, 'too_many_attempts', "Massa intents fallits. Torna-ho a provar d'aquí a uns minuts.");
-  }
-
   const identifier = typeof req.body.username === 'string' ? req.body.username.trim() : '';
   const password = typeof req.body.password === 'string' ? req.body.password : '';
-  const user = identifier && password ? await authService.loginWithPassword(identifier, password) : null;
-  if (!user) {
-    const current = entry || { count: 0, resetAt: Date.now() + FAILURE_WINDOW_MS };
-    current.count += 1;
-    failures.set(key, current);
-    throw new HttpError(401, 'invalid_credentials', "L'usuari o la contrasenya no són correctes.");
-  }
+  const addressKey = `ip:${req.ip}`;
+  const accountKey = `account:${req.ip}:${identifier.toLowerCase().slice(0, 255)}`;
 
-  failures.delete(key);
+  if (isLocked(accountKey, MAX_FAILURES) || isLocked(addressKey, MAX_FAILURES_PER_ADDRESS)) {
+    throw new HttpError(429, 'too_many_attempts', "Massa intents fallits. Torna-ho a provar d'aquí a uns minuts.");
+  }
+  countAttempt(accountKey);
+  countAttempt(addressKey);
+
+  const user = identifier && password ? await authService.loginWithPassword(identifier, password) : null;
+  if (!user) throw new HttpError(401, 'invalid_credentials', "L'usuari o la contrasenya no són correctes.");
+
+  // A successful login was not a failure after all.
+  failures.delete(accountKey);
+  forgetAttempt(addressKey);
   await establishSession(req, user);
   res.json({ user: authService.publicUser(user), csrf_token: csrfToken(req) });
 }

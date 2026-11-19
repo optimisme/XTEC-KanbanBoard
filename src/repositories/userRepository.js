@@ -39,6 +39,16 @@ export async function setPasswordHash(db, id, passwordHash) {
   await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
 }
 
+// Ends a person's sessions, optionally keeping one (the one making the
+// request). The session store keeps each session as JSON text.
+export async function deleteSessions(db, userId, exceptSessionId = '') {
+  await db.query(
+    `DELETE FROM sessions
+      WHERE session_id <> ? AND JSON_VALID(data) AND JSON_EXTRACT(data, '$.userId') = ?`,
+    [exceptSessionId, userId]
+  );
+}
+
 export async function touchLogin(db, id) {
   await db.query('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?', [id]);
 }
@@ -85,9 +95,4 @@ export function suggest(db, { role, text, limit }) {
       ORDER BY name ASC, id ASC LIMIT ?`,
     [role, pattern, pattern, limit]
   );
-}
-
-export async function countActiveAdmins(db) {
-  const rows = await db.query("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND status = 'active'");
-  return rows[0].n;
 }

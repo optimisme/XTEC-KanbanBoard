@@ -105,8 +105,9 @@ export async function updateOwnProfile(actor, body) {
 }
 
 // Sets or changes the caller's own password. Changing an existing password
-// requires the current one. Only a salted hash is stored.
-export async function setOwnPassword(actor, body) {
+// requires the current one. Only a salted hash is stored. Every other session
+// of the person is ended, so a stolen session does not outlive the change.
+export async function setOwnPassword(actor, body, sessionId) {
   if (isLocalAdmin(actor)) {
     throw conflict("La contrasenya d'aquest compte es defineix a la configuració del servidor.");
   }
@@ -121,5 +122,19 @@ export async function setOwnPassword(actor, body) {
     }
   }
   await userRepo.setPasswordHash(db, actor.id, await hashPassword(body.new_password));
+  await userRepo.deleteSessions(db, actor.id, sessionId);
   return present(await userRepo.findById(db, actor.id));
+}
+
+// An administrator removes somebody's password: for a forgotten one, or so
+// that the person can only come in through the institutional account again
+// (where the institution decides who still has access). Their open sessions
+// are ended too.
+export async function clearPassword(actor, userId, sessionId) {
+  const user = await userRepo.findById(db, userId);
+  if (!user) throw notFound("No s'ha trobat l'usuari.");
+  if (!user.password_hash) throw conflict('Aquest compte no té contrasenya.');
+  await userRepo.setPasswordHash(db, userId, null);
+  await userRepo.deleteSessions(db, userId, sessionId);
+  return present(await userRepo.findById(db, userId));
 }

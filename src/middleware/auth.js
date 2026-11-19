@@ -12,11 +12,6 @@ export async function loadUser(req, res, next) {
   next();
 }
 
-export function requireAuthenticated(req, res, next) {
-  if (!req.user) throw unauthenticated();
-  next();
-}
-
 // Pending, rejected and disabled accounts cannot reach application data.
 export function requireActive(req, res, next) {
   if (!req.user) throw unauthenticated();

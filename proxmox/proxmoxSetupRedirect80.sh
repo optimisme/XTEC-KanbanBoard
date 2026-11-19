@@ -17,17 +17,12 @@ SSH_OPTS='-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa'
 echo "Server port: $SERVER_PORT"
 [[ -f "$RSA_PATH" ]] || { echo "Error: no troba la clau: $RSA_PATH"; exit 1; }
 
-# read -s -p "Pwd sudo remota: " SUDO_PASSWORD
-# echo
-# ESC_PWD=$(printf "%q" "$SUDO_PASSWORD")
-
 eval "$(ssh-agent -s)" >/dev/null
 ssh-add "$RSA_PATH" >/dev/null
 
 # Prepare remote script with real port substituted
 REMOTE_SCRIPT=$(cat <<'EOF'
 set -euo pipefail
-# run_sudo() { echo "$SUDO_PASSWORD" | sudo -S -p '' "$@"; }
 run_sudo() { sudo -S -p '' "$@"; }
 
 export DEBIAN_FRONTEND=noninteractive
@@ -56,7 +51,6 @@ EOF
 # Substitute port before sending
 REMOTE_SCRIPT="${REMOTE_SCRIPT//SERVER_PORT_VALUE/$SERVER_PORT}"
 
-# ssh -T -p "$DEFAULT_SSH_PORT" $SSH_OPTS "$USER@$DEFAULT_HOST" "SUDO_PASSWORD=$ESC_PWD bash -s" <<<"$REMOTE_SCRIPT"
 ssh -T -p "$DEFAULT_SSH_PORT" $SSH_OPTS "$USER@$DEFAULT_HOST" "sudo bash -s" <<<"$REMOTE_SCRIPT"
 
 ssh-agent -k >/dev/null

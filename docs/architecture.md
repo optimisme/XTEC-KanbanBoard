@@ -143,8 +143,11 @@ group completes a task, the current version number is stored with it.
   and (in production) `Secure` cookies. The session id is regenerated at login.
 - Optional passwords are stored as salted scrypt hashes
   (`scrypt$N$r$p$salt$hash`) and compared in constant time. A sign-in attempt
-  for an unknown email runs the same computation, and repeated failures lock
-  the client address out for a while.
+  for an unknown email runs the same computation. Failed attempts are counted
+  per client address and account (and, with a higher limit, per address)
+  before the password is checked, and lock further attempts out for a while.
+  Changing a password, or an administrator removing it, ends the person's
+  other sessions.
 - CSRF: synchronizer token kept in the session and required in the
   `X-CSRF-Token` header for every state-changing request.
 - The development login is only registered when `DEV_AUTH_ENABLED=true`, and

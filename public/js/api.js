@@ -14,9 +14,7 @@ export class ApiError extends Error {
 async function request(method, url, body) {
   const options = { method, credentials: 'same-origin', headers: { Accept: 'application/json' } };
   if (method !== 'GET') options.headers['X-CSRF-Token'] = csrfToken;
-  if (body instanceof FormData) {
-    options.body = body;
-  } else if (body !== undefined) {
+  if (body !== undefined) {
     options.headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(body);
   }

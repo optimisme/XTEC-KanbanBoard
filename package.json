@@ -24,6 +24,9 @@
     "openid-client": "^6.1.0",
     "sanitize-html": "^2.13.0"
   },
+  "overrides": {
+    "mysql2": "$mysql2"
+  },
   "devDependencies": {
     "supertest": "^7.0.0"
   }
