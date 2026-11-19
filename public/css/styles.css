@@ -355,7 +355,9 @@ td.actions .btn + .btn { margin-left: 6px; }
 .matrix th, .matrix td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); padding: 6px; }
 .matrix thead th { position: sticky; top: 0; z-index: 2; vertical-align: bottom; min-width: 46px; max-width: 46px; text-align: center; }
 .matrix thead th .col-title {
-  writing-mode: vertical-rl; transform: rotate(180deg); max-height: 150px; overflow: hidden;
+  /* inline-block, so the header's centring also applies to the rotated title */
+  display: inline-block; vertical-align: bottom;
+  writing-mode: vertical-rl; transform: rotate(180deg); max-height: 260px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text); font-size: 0.8rem;
 }
 .matrix thead th .col-num { display: block; margin-top: 6px; }
