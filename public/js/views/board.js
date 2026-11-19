@@ -164,8 +164,10 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
     modal({
       title: board.project.name,
       wide: true,
+      // Never taller than the window: a long description scrolls inside.
+      fit: true,
       body: board.project.description_html
-        ? h('div', { class: 'markdown', html: board.project.description_html })
+        ? h('div', { class: 'tab-scroll', tabindex: '0' }, h('div', { class: 'markdown', html: board.project.description_html }))
         : h('p', { class: 'muted' }, 'Aquest projecte no té descripció.'),
     });
   }

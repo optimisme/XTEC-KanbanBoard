@@ -19,6 +19,8 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
   const form = h(
     'form',
     {
+      // The fields scroll and the buttons stay in view (see the "fit" dialog).
+      class: 'tab-panel',
       onSubmit: (event) => {
         event.preventDefault();
         run(save, async () => {
@@ -34,19 +36,20 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
         });
       },
     },
-    task
+    h('div', { class: 'tab-scroll' },
+      task
       ? h('div', { class: 'notice' }, "Els canvis es veuran a tots els grups. L'estat, les persones responsables, els comentaris i l'historial no es modifiquen.")
       : h('div', { class: 'notice' }, 'La tasca s\'afegirà al final de la llista i apareixerà com a pendent a tots els grups.'),
-    field('Títol', title),
-    field('Descripció', description, 'Admet Markdown: títols, llistes, enllaços, imatges i blocs de codi.'),
-    h('div', { class: 'field' }, h('label', {}, 'Etiquetes (opcional)'), tags.el,
-      h('div', { class: 'hint' }, "Tria'n de suggerides o escriu-ne una de nova; es crea en desar la tasca.")),
+      field('Títol', title),
+      field('Descripció', description, 'Admet Markdown: títols, llistes, enllaços, imatges i blocs de codi.'),
+      h('div', { class: 'field' }, h('label', {}, 'Etiquetes (opcional)'), tags.el,
+        h('div', { class: 'hint' }, "Tria'n de suggerides o escriu-ne una de nova; es crea en desar la tasca."))),
     h('div', { class: 'card-actions' },
       save,
       // The version history used to hang off the read-only view; keep it one click away.
       task ? h('button', { class: 'btn', type: 'button', onClick: () => openVersions(task.id).catch(showError) }, 'Historial de versions') : null)
   );
-  const dialog = modal({ title: task ? 'Edita la tasca compartida' : 'Nova tasca compartida', body: form, wide: true });
+  const dialog = modal({ title: task ? 'Edita la tasca compartida' : 'Nova tasca compartida', body: form, wide: true, fit: true });
 }
 
 export async function openVersions(taskId) {
