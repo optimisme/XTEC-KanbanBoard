@@ -7,10 +7,26 @@ import { append, groupLabel, h, modal } from '../ui.js';
 
 // What each badge is and how a group earns it.
 const BADGES = {
-  everyone: { icon: '🙌', title: 'Tothom treballa', how: 'Cada persona del grup ha finalitzat almenys una tasca del projecte.', why: 'En un equip ningú no es queda mirant: tothom hi aporta feina acabada.' },
-  balanced: { icon: '⚖️', title: 'Feina ben repartida', how: 'Amb dues tasques finalitzades per persona o més, entre qui n\'ha fet més i qui menys hi ha, com a molt, dues tasques de diferència.', why: 'La feina no recau sempre en les mateixes persones: es reparteix de manera equitativa.' },
-  versatile: { icon: '🧩', title: 'Polivalents', how: 'Cada persona ha finalitzat tasques de dues etiquetes diferents o més.', why: 'Tothom s\'atreveix amb tasques de tipus diferents, en lloc de fer sempre el mateix.' },
-  autonomous: { icon: '🧭', title: 'Autonomia', how: 'Cada persona ha finalitzat almenys una tasca pel seu compte, sense col·laboradors.', why: 'Cada membre és capaç de tirar endavant una tasca sense dependre dels altres.' },
+  everyone: {
+    icon: '🙌', title: 'Tothom treballa',
+    how: 'Ningú no ha finalitzat menys tasques de les que li tocarien a parts iguals, amb un marge del 15% i, com a mínim, d\'una tasca. Amb 12 tasques entre 3 persones en toquen 4 a cadascuna, i el mínim és 3. Tothom n\'ha de tenir almenys una.',
+    why: 'En un equip ningú no es queda mirant: tothom hi aporta feina acabada.',
+  },
+  balanced: {
+    icon: '⚖️', title: 'Feina ben repartida',
+    how: 'Ningú no ha finalitzat més tasques de les que li tocarien a parts iguals, amb un marge del 15% i, com a mínim, d\'una tasca. Amb 12 tasques entre 3 persones en toquen 4 a cadascuna, i el màxim és 5.',
+    why: 'La feina no recau sempre en les mateixes persones: es reparteix de manera equitativa.',
+  },
+  versatile: {
+    icon: '🧩', title: 'Polivalents',
+    how: 'Cada persona ha finalitzat tasques de, com a mínim, la meitat de les etiquetes que ha treballat el grup.',
+    why: 'Tothom s\'atreveix amb tasques de tipus diferents, en lloc de fer sempre el mateix.',
+  },
+  autonomous: {
+    icon: '🧭', title: 'Autonomia',
+    how: 'Cada persona ha finalitzat pel seu compte, sense col·laboradors, almenys un terç de les seves tasques.',
+    why: 'Cada membre és capaç de tirar endavant una tasca sense dependre dels altres.',
+  },
 };
 const UNAVAILABLE = {
   team: 'Per a grups de dues persones o més',
@@ -35,24 +51,25 @@ function explain(badge) {
   const info = BADGES[badge.key];
   const standing = badge.unavailable
     ? `Aquest grup no la pot aconseguir: ${UNAVAILABLE[badge.unavailable].toLowerCase()}.`
-    : badge.earned ? 'Aquest grup ja la té.' : `Aquest grup encara no la té: ${badge.progress}.`;
+    : `${badge.earned ? 'Aquest grup la té ara mateix' : 'Aquest grup no la té ara mateix'}. ${badge.progress}.`;
   modal({
     title: `${info.icon} ${info.title}`,
     body: h('div', {},
       h('p', {}, h('strong', {}, "Com s'aconsegueix: "), info.how),
       h('p', { class: 'muted' }, info.why),
-      h('p', {}, standing)),
+      h('p', {}, standing),
+      h('p', { class: 'muted' }, "Es calcula sobre totes les tasques finalitzades fins ara, i es torna a calcular cada vegada: una insígnia aconseguida es pot perdre si el grup deixa de treballar així.")),
   });
 }
 
 function badgeTile(badge) {
   const info = BADGES[badge.key];
   const state = badge.unavailable ? 'unavailable' : badge.earned ? 'earned' : 'locked';
-  const status = badge.unavailable ? UNAVAILABLE[badge.unavailable] : badge.earned ? 'Aconseguida' : badge.progress;
+  const status = badge.unavailable ? UNAVAILABLE[badge.unavailable] : badge.progress;
   return h('li', { class: `badge ${state}` },
     h('span', { class: 'badge-icon', 'aria-hidden': 'true' }, info.icon),
     h('span', { class: 'badge-text' },
-      h('strong', {}, info.title),
+      h('strong', {}, info.title, badge.earned ? h('span', { class: 'badge-check', 'aria-label': 'Aconseguida' }, ' ✓') : null),
       h('span', {}, status)),
     h('button', {
       class: 'badge-how', type: 'button', 'aria-label': `Com s'aconsegueix «${info.title}»`, title: "Com s'aconsegueix",
@@ -112,7 +129,7 @@ export async function rankingContent(projectId) {
     h('p', { class: 'muted rank-legend' },
       h('span', { class: 'rank-average-key', 'aria-hidden': 'true' }),
       `La marca vertical de cada barra és la mitjana de la classe (${data.class_percent}%). `,
-      "Treballar en equip no vol dir fer totes les tasques plegats: vol dir que tothom treballa, que la feina es reparteix de manera equitativa i que cada persona sap fer tasques de tipus diferents i tirar-ne endavant una tota sola. Tots els grups poden aconseguir totes les insígnies; el botó «?» de cadascuna explica com. No mesuren la qualitat de la feina, que valora el professorat."));
+      "Treballar en equip no vol dir fer totes les tasques plegats: vol dir que tothom treballa, que la feina es reparteix de manera equitativa i que cada persona sap fer tasques de tipus diferents i tirar-ne endavant una tota sola. Tots els grups poden aconseguir totes les insígnies, i també perdre-les: es calculen sobre tota la feina finalitzada fins ara. El botó «?» de cadascuna explica com. No mesuren la qualitat de la feina, que valora el professorat."));
 }
 
 // Page for students, who have no project page of their own.

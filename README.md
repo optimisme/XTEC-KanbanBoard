@@ -72,8 +72,9 @@ ha nivells de prioritat a part. També es poden importar d'un fitxer Markdown.
 ### Grups
 
 Els grups s'omplen escrivint el correu institucional de cada alumne. Cada grup
-té el seu tauler, el seu repositori de GitHub i una barra que en resumeix el
-progrés. A més del número, un grup pot tenir un nom curt opcional.
+té el seu tauler, una barra que en resumeix el progrés i, si l'alumnat els ha
+configurat, l'enllaç al repositori de GitHub i a la web on publica la feina.
+A més del número, un grup pot tenir un nom curt opcional.
 
 ![Grups del projecte amb el seu progrés](assets/05-grups.png)
 
@@ -81,7 +82,8 @@ progrés. A més del número, un grup pot tenir un nom curt opcional.
 
 L'alumnat mou les tasques entre les columnes. Qui comença una tasca sense
 responsable en queda com a responsable automàticament. Una tasca bloquejada
-mostra el motiu a la mateixa targeta.
+mostra el motiu a la mateixa targeta. Des del tauler, el grup configura el seu
+repositori de GitHub i l'adreça de la seva web.
 
 ![Tauler Kanban d'un grup](assets/06-tauler.png)
 
@@ -107,6 +109,41 @@ vista separa la responsabilitat de les accions realment registrades: tasques
 finalitzades, col·laboracions, comentaris, bloquejos i traspassos.
 
 ![Activitat d'un alumne dins d'un projecte](assets/10-activitat-alumne.png)
+
+### Insígnies de treball en equip
+
+Una pàgina amb el progrés de tots els grups, la mitjana de la classe i quatre
+insígnies que qualsevol grup pot aconseguir. No hi ha classificació ni podi:
+les insígnies premien com es reparteix la feina, no qui va més de pressa.
+
+| Insígnia | El grup la té mentre… |
+|---|---|
+| 🙌 Tothom treballa | Ningú no ha finalitzat menys tasques de les que li tocarien a parts iguals, amb un marge del 15% (com a mínim, d'una tasca). Tothom en té almenys una. |
+| ⚖️ Feina ben repartida | Ningú no ha finalitzat més tasques de les que li tocarien a parts iguals, amb un marge del 15% (com a mínim, d'una tasca). |
+| 🧩 Polivalents | Cada persona ha finalitzat tasques de, com a mínim, la meitat de les etiquetes que ha treballat el grup. |
+| 🧭 Autonomia | Cada persona ha finalitzat pel seu compte, sense col·laboradors, almenys un terç de les seves tasques. |
+
+Per exemple, amb 12 tasques finalitzades entre 3 persones en toquen 4 a
+cadascuna, i cada persona en pot tenir entre 3 i 5. Funciona igual per a grups
+d'una a sis persones.
+
+Es calculen sobre totes les tasques que el grup ha finalitzat fins ara, no
+sobre un nombre fix: comencen a comptar quan hi ha, de mitjana, una tasca
+finalitzada per persona, i una insígnia aconseguida es perd si el grup deixa
+de treballar així.
+
+El botó «?» de cada insígnia explica com s'aconsegueix i què li falta al grup.
+La marca vertical de cada barra és la mitjana de la classe, perquè cada grup
+sàpiga si va avançat o endarrerit.
+
+El professorat la veu sempre, a la pestanya «Insígnies» del projecte.
+L'alumnat només la veu si s'activa «Mostra les insígnies a l'alumnat» a «Edita
+el projecte» (per defecte està desactivat); aleshores té un botó «Insígnies»
+al seu tauler i veu el nom i el progrés dels altres grups, però no qui en
+forma part. Les insígnies es calculen a partir de qui marca cada tasca com a
+finalitzada: mostren com es registra la feina, no en mesuren la qualitat.
+
+![Insígnies de treball en equip vistes per un alumne](assets/11-insignies.png)
 
 ### Usuaris
 
@@ -249,6 +286,7 @@ progrés, comentaris i historial (els comptes d'usuari es conserven).
 | Traspassar una tasca pròpia a un company del grup | | | ✔ |
 | Gestionar els col·laboradors d'una tasca pròpia | ✔ | ✔ | ✔ |
 | Configurar el repositori de GitHub i la web del grup | ✔ | | ✔ |
+| Veure les insígnies de treball en equip de tots els grups | ✔ | ✔ | Si el projecte les mostra |
 
 L'accés del professorat depèn **només** d'estar assignat al projecte. Qui crea
 o duplica un projecte hi queda assignat automàticament, i un professor no es

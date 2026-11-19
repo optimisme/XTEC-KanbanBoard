@@ -216,25 +216,30 @@ test('teamwork badges: staff always, students only when the project shows them',
   assert.equal(staff.class_percent, Math.round(staff.groups.reduce((sum, g) => sum + g.percent, 0) / staff.groups.length));
 
   const badge = (data, groupId, key) => data.groups.find((g) => g.id === groupId).badges.find((b) => b.key === key);
-  // Only one of the two members has worked so far.
-  for (const key of ['everyone', 'autonomous', 'balanced']) assert.equal(badge(staff, s.group0.id, key).earned, false, key);
-  assert.equal(badge(staff, s.group0.id, 'everyone').progress, '1 de 2 persones');
-  assert.equal(badge(staff, s.group0.id, 'autonomous').progress, '1 de 2 persones');
-  assert.equal(badge(staff, s.group0.id, 'balanced').progress, '1 de 4 tasques finalitzades');
-  // A group of one person cannot earn the badges that need a team.
+  // One finished task for two people: not enough yet to measure anything.
+  for (const key of ['everyone', 'balanced', 'autonomous']) assert.equal(badge(staff, s.group0.id, key).earned, false, key);
+  assert.equal(badge(staff, s.group0.id, 'everyone').progress, 'Encara no compta: 1 de 2 tasques finalitzades');
+  // A group of one person cannot earn the badge that needs a team.
   const solo = badge(staff, s.group1.id, 'balanced');
   assert.equal(solo.unavailable, 'team');
   assert.equal(solo.earned, false);
   assert.equal(staff.badges_total, staff.groups.flatMap((g) => g.badges).filter((b) => !b.unavailable).length);
 
-  // Student 2 also finishes a task alone: everyone works, each on their own.
+  // Student 2 also finishes a task alone: an equal split, each on their own.
   const student2 = await login(s.users.s2.email);
   await finish(student2, second);
   const later = (await teacher.get(url)).body;
-  for (const key of ['everyone', 'autonomous']) assert.equal(badge(later, s.group0.id, key).earned, true, key);
-  assert.equal(later.badges_earned, staff.badges_earned + 2);
-  // Two tasks each are still needed before the share of work counts as fair.
-  assert.equal(badge(later, s.group0.id, 'balanced').earned, false);
+  for (const key of ['everyone', 'balanced', 'autonomous']) assert.equal(badge(later, s.group0.id, key).earned, true, key);
+  assert.equal(badge(later, s.group0.id, 'everyone').progress, 'Qui menys: 1 tasca (mínim 1)');
+  assert.equal(badge(later, s.group0.id, 'balanced').progress, 'Qui més: 1 tasca (màxim 2)');
+  assert.match(badge(later, s.group0.id, 'autonomous').progress, /100% en solitari/);
+  assert.ok(later.badges_earned >= staff.badges_earned + 3);
+
+  // Badges are a picture of the present: reopening that task loses them again.
+  assert.equal((await student2.post(`/api/group-tasks/${second.id}/status`, { status: 'in_progress' })).status, 200);
+  const lost = (await teacher.get(url)).body;
+  for (const key of ['everyone', 'balanced', 'autonomous']) assert.equal(badge(lost, s.group0.id, key).earned, false, key);
+  assert.equal(lost.badges_earned, staff.badges_earned);
 
   // Students get the same page, but only their own group can be opened.
   const mine = (await student1.get(url)).body;

@@ -59,44 +59,76 @@ export async function matrix(user, projectId, query) {
 // never being ahead of another group. Working as a team does not mean doing
 // every task together: it means everyone works, the work is shared fairly,
 // and each person can handle different kinds of task and finish one alone.
-const VERSATILE_TAGS = 2;
-const BALANCE_TASKS_EACH = 2;
-const BALANCE_MAX_GAP = 2;
+//
+// Each badge is a proportion over everything the group has finished so far,
+// not a fixed number of tasks. So a badge is a picture of how the group works
+// now: it is lost again when somebody stops pulling their weight.
+// How far a person may be from an equal split of the finished tasks: 15%, and
+// never less than one task, because tasks are whole and groups are small (one
+// to six people). Everyone needs at least one finished task.
+const SHARE_TOLERANCE = 0.15;
+const MIN_TAG_COVERAGE = 0.5; // of the tags the group has worked on
+const MIN_SOLO = 1 / 3; // of a person's own finished tasks
+const MIN_PROJECT_TAGS = 2;
 
-function badges({ members, completions, projectTags }) {
+const percent = (ratio) => `${Math.round(ratio * 100)}%`;
+
+function badges({ members, completions, memberTags, projectTags }) {
   const ids = members.map((m) => m.id);
   const size = ids.length;
-  const people = (n) => `${n} de ${size} ${size === 1 ? 'persona' : 'persones'}`;
-  const of = (id) => completions.get(id) || { n: 0, solo: 0, tags: 0 };
-  const howMany = (test) => ids.filter(test).length;
+  const of = (id) => completions.get(id) || { n: 0, solo: 0 };
+  const finished = ids.reduce((sum, id) => sum + of(id).n, 0);
+  const groupTags = new Set(ids.flatMap((id) => [...(memberTags.get(id) || [])]));
 
-  const working = howMany((id) => of(id).n > 0);
-  const versatile = howMany((id) => of(id).tags >= VERSATILE_TAGS);
-  const autonomous = howMany((id) => of(id).solo > 0);
+  // Everything is measured once there is, on average, a finished task per person.
+  const enough = size > 0 && finished >= size;
+  const waiting = `Encara no compta: ${finished} de ${size} tasques finalitzades`;
+  const measured = (earned, progress) => (enough ? { earned, progress } : { earned: false, progress: waiting });
+
+  // Tasks each person has finished, against an equal split with its tolerance:
+  // 12 tasks among 3 people is 4 each, and between 3 and 5 is fine.
   const counts = ids.map((id) => of(id).n);
-  const finished = counts.reduce((sum, n) => sum + n, 0);
-  const gap = size ? Math.max(...counts) - Math.min(...counts) : 0;
-  const balanceGoal = BALANCE_TASKS_EACH * size;
+  const equal = size ? finished / size : 0;
+  const margin = Math.max(1, equal * SHARE_TOLERANCE);
+  const fewest = Math.max(1, Math.ceil(equal - margin));
+  const most = Math.floor(equal + margin);
+  const tasks = (n) => `${n} ${n === 1 ? 'tasca' : 'tasques'}`;
+  // Part of the group's tags each person has worked on.
+  const coverage = ids.map((id) => (groupTags.size ? (memberTags.get(id) || new Set()).size / groupTags.size : 0));
+  // Part of each person's own finished tasks done without collaborators.
+  const solo = ids.map((id) => (of(id).n ? of(id).solo / of(id).n : 0));
+  const lowest = (values) => (values.length ? Math.min(...values) : 0);
+  const highest = (values) => (values.length ? Math.max(...values) : 0);
 
   const list = [
-    // Everyone works on the project.
-    { key: 'everyone', earned: size > 0 && working === size, progress: people(working) },
-    // The finished tasks are shared out fairly.
+    // Everyone works: nobody is far below their part.
+    {
+      key: 'everyone',
+      ...measured(lowest(counts) >= fewest, `Qui menys: ${tasks(lowest(counts))} (mínim ${fewest})`),
+    },
+    // The work is shared fairly: nobody carries the group.
     {
       key: 'balanced',
       needs_team: true,
-      earned: finished >= balanceGoal && gap <= BALANCE_MAX_GAP,
-      progress: finished < balanceGoal
-        ? `${finished} de ${balanceGoal} tasques finalitzades`
-        : `${gap} tasques de diferència`,
+      ...measured(highest(counts) <= most, `Qui més: ${tasks(highest(counts))} (màxim ${most})`),
     },
-    // Each person can take on tasks of different kinds (tags).
-    { key: 'versatile', needs_tags: true, earned: size > 0 && versatile === size, progress: people(versatile) },
-    // Each person can carry a task through alone.
-    { key: 'autonomous', earned: size > 0 && autonomous === size, progress: people(autonomous) },
+    // Each person takes on tasks of different kinds (tags).
+    {
+      key: 'versatile',
+      needs_tags: true,
+      ...measured(
+        groupTags.size > 0 && lowest(coverage) >= MIN_TAG_COVERAGE,
+        `Qui menys: ${percent(lowest(coverage))} de les etiquetes (cal ${percent(MIN_TAG_COVERAGE)})`
+      ),
+    },
+    // Each person carries tasks through alone too.
+    {
+      key: 'autonomous',
+      ...measured(lowest(solo) >= MIN_SOLO, `Qui menys: ${percent(lowest(solo))} en solitari (cal ${percent(MIN_SOLO)})`),
+    },
   ];
   return list.map(({ needs_team: team, needs_tags: tags, ...badge }) => {
-    const reason = team && size < 2 ? 'team' : tags && projectTags < VERSATILE_TAGS ? 'tags' : null;
+    const reason = team && size < 2 ? 'team' : tags && projectTags < MIN_PROJECT_TAGS ? 'tags' : null;
     return reason ? { ...badge, earned: false, unavailable: reason, progress: '' } : badge;
   });
 }
@@ -111,11 +143,12 @@ export async function ranking(user, projectId) {
     throw forbidden("Les insígnies d'aquest projecte no són visibles per a l'alumnat.");
   }
 
-  const [groups, members, progress, completions, tags] = await Promise.all([
+  const [groups, members, progress, completions, memberTags, tags] = await Promise.all([
     groupRepo.listByProject(db, projectId),
     groupRepo.membersByProject(db, projectId),
     groupRepo.progressByProject(db, projectId),
     supervisionRepo.completionsByMember(db, projectId),
+    supervisionRepo.tagsByMember(db, projectId),
     tagRepo.listForProject(db, projectId),
   ]);
   const of = (rows, groupId) => rows.filter((row) => row.group_id === groupId);
@@ -134,7 +167,8 @@ export async function ranking(user, projectId) {
       percent: total ? Math.round((p.completed / total) * 100) : 0,
       badges: badges({
         members: members.get(g.id) || [],
-        completions: new Map(of(completions, g.id).map((row) => [row.user_id, { n: Number(row.n), solo: Number(row.solo), tags: Number(row.tags) }])),
+        completions: new Map(of(completions, g.id).map((row) => [row.user_id, { n: Number(row.n), solo: Number(row.solo) }])),
+        memberTags: of(memberTags, g.id).reduce((map, row) => map.set(row.user_id, (map.get(row.user_id) || new Set()).add(row.tag_id)), new Map()),
         projectTags: tags.length,
       }),
     };

@@ -443,7 +443,8 @@ td.actions .btn + .btn { margin-left: 6px; }
 .badge-text strong { font-size: 0.88rem; color: var(--text); }
 .badge.earned { border-color: #86efac; background: #f0fdf4; }
 .badge.earned .badge-icon { background: #bbf7d0; }
-.badge.earned .badge-text span { color: #166534; font-weight: 600; }
+.badge.earned .badge-text span { color: #166534; }
+.badge.earned .badge-check { font-weight: 700; }
 .badge.locked .badge-icon, .badge.unavailable .badge-icon { filter: grayscale(1); opacity: 0.55; }
 .badge.unavailable { border-style: dashed; }
 .badge.unavailable .badge-text strong { color: var(--text-muted); }

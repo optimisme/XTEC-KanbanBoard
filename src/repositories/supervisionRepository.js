@@ -139,18 +139,26 @@ export function recentActivity(db, projectId, userId, limit) {
 const ACTIVE_TASKS = `FROM group_tasks gt
   JOIN task_definitions td ON td.id = gt.task_id AND td.deleted_at IS NULL`;
 
-// Per group and person: tasks finished, how many of them on their own (no
-// collaborators) and how many different tags those tasks cover.
+// Per group and person: tasks finished and how many of them on their own
+// (without collaborators).
 export function completionsByMember(db, projectId) {
   return db.query(
-    `SELECT gt.group_id, gt.completed_by AS user_id, COUNT(DISTINCT gt.id) AS n,
-            COUNT(DISTINCT CASE WHEN NOT EXISTS (SELECT 1 FROM task_collaborators tc WHERE tc.group_task_id = gt.id)
-                                THEN gt.id END) AS solo,
-            COUNT(DISTINCT tt.tag_id) AS tags
+    `SELECT gt.group_id, gt.completed_by AS user_id, COUNT(*) AS n,
+            SUM(NOT EXISTS (SELECT 1 FROM task_collaborators tc WHERE tc.group_task_id = gt.id)) AS solo
        ${ACTIVE_TASKS}
-       LEFT JOIN task_tags tt ON tt.task_id = gt.task_id
       WHERE gt.project_id = ? AND gt.status = 'completed' AND gt.completed_by IS NOT NULL
       GROUP BY gt.group_id, gt.completed_by`,
+    [projectId]
+  );
+}
+
+// The tags of the tasks each person has finished: one row per group, person and tag.
+export function tagsByMember(db, projectId) {
+  return db.query(
+    `SELECT DISTINCT gt.group_id, gt.completed_by AS user_id, tt.tag_id
+       ${ACTIVE_TASKS}
+       JOIN task_tags tt ON tt.task_id = gt.task_id
+      WHERE gt.project_id = ? AND gt.status = 'completed' AND gt.completed_by IS NOT NULL`,
     [projectId]
   );
 }
