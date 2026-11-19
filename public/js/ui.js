@@ -115,7 +115,7 @@ export function tagPicker(selectedTags, suggestions) {
 
   const chosenEl = h('div', { class: 'chips tag-picker-chosen' });
   const suggestedEl = h('div', { class: 'tag-picker-suggestions' });
-  const input = h('input', { type: 'text', maxlength: '40', placeholder: 'Escriu una etiqueta i prem Retorn', 'aria-label': 'Etiqueta nova' });
+  const input = plainInput({ maxlength: '40', placeholder: 'Escriu una etiqueta i prem Retorn', 'aria-label': 'Etiqueta nova' });
   const addButton = h('button', { class: 'btn', type: 'button' }, 'Afegeix');
 
   function add(name) {
@@ -324,6 +324,27 @@ export function field(label, control, hint) {
   const id = control.id || `f-${Math.random().toString(36).slice(2, 9)}`;
   control.id = id;
   return h('div', { class: 'field' }, h('label', { for: id }, label), control, hint ? h('div', { class: 'hint' }, hint) : null);
+}
+
+// A text box for searching or typing something the browser should not try to
+// fill in by itself. Browsers treat autocomplete="off" as a hint, so several
+// signals are combined: a search field, a name that is different every time
+// (remembered entries are stored by field name), and the markers the common
+// password managers look for.
+export function plainInput(attrs = {}) {
+  return h('input', {
+    type: 'search',
+    name: `q-${Math.random().toString(36).slice(2, 10)}`,
+    autocomplete: 'off',
+    autocorrect: 'off',
+    autocapitalize: 'none',
+    spellcheck: 'false',
+    'data-1p-ignore': 'true',
+    'data-lpignore': 'true',
+    'data-bwignore': 'true',
+    'data-form-type': 'other',
+    ...attrs,
+  });
 }
 
 // Appends children like h() does: nested arrays are flattened and empty

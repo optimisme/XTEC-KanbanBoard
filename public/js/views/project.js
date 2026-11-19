@@ -2,7 +2,7 @@
 // students and (administrators only) settings.
 import { api } from '../api.js';
 import {
-  append, clear, confirmDialog, field, h, icon, modal, promptDialog, readableTextColor, run, showError,
+  append, clear, confirmDialog, field, h, icon, modal, plainInput, promptDialog, readableTextColor, run, showError,
   STATUS_LABELS, tagChip, tagChips,
   STATUSES, statusBadge, toast,
 } from '../ui.js';
@@ -53,7 +53,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
   function openGroupForm(group) {
     const members = (group ? group.students : []).map((s) => ({ email: s.email, name: s.name, isNew: false }));
     const listEl = h('ul', { class: 'member-list' });
-    const email = h('input', { type: 'text', placeholder: 'Nom o correu', autocomplete: 'off', 'aria-label': "Nom o correu de l'alumne" });
+    const email = plainInput({ placeholder: 'Nom o correu', 'aria-label': "Nom o correu de l'alumne" });
     const name = h('input', { type: 'text', maxlength: '200', placeholder: 'Nom i cognoms', autocomplete: 'off' });
     const nameField = h('div', { class: 'field', hidden: true },
       h('label', {}, "Aquest correu encara no té compte. Indica el nom de l'alumne per crear-lo:"), name);
@@ -356,7 +356,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
     }
 
     function addTeacherForm() {
-      const email = h('input', { type: 'text', required: true, placeholder: 'Nom o correu', autocomplete: 'off', 'aria-label': 'Nom o correu del professor o professora' });
+      const email = plainInput({ required: true, placeholder: 'Nom o correu', 'aria-label': 'Nom o correu del professor o professora' });
       const add = h('button', { class: 'btn', type: 'submit' }, 'Afegeix');
       return h('form', {
         class: 'field', style: { 'margin-top': '14px' },
@@ -412,7 +412,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
             }));
       }
 
-      const newName = h('input', { type: 'text', maxlength: '40', placeholder: 'Etiqueta nova', 'aria-label': 'Etiqueta nova' });
+      const newName = plainInput({ maxlength: '40', placeholder: 'Etiqueta nova', 'aria-label': 'Etiqueta nova' });
       const add = h('button', { class: 'btn', type: 'submit' }, 'Afegeix');
       const form = h('form', {
         class: 'inline-form', style: { 'margin-top': '12px' },
