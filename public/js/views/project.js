@@ -260,7 +260,12 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
           h('div', { class: 'body' },
             h('button', {
               class: 'task-title', type: 'button',
-              onClick: () => openDefinition(task.id, { canManage: project.can_manage, writable, onChanged: refresh }).catch(showError),
+              // Managers go straight to the editor; everyone else (and archived
+              // projects) gets the read-only view.
+              onClick: () => (project.can_manage && writable
+                ? openTaskEditor({ projectId: project.id, taskId: task.id, onSaved: refresh })
+                : openDefinition(task.id, { canManage: project.can_manage, writable, onChanged: refresh })
+              ).catch(showError),
             }, task.title),
             tagChips(task.tags)),
           project.can_manage && writable ? h('div', { class: 'row-actions' }, up, down, remove) : null);

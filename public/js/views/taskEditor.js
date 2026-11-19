@@ -1,7 +1,7 @@
 // Shared task definitions: editor, read-only view, version history and the
 // initial Markdown import.
 import { api } from '../api.js';
-import { append, clear, field, formatDateTime, h, modal, run, tagChip, tagChips, tagPicker, toast } from '../ui.js';
+import { append, clear, field, formatDateTime, h, modal, run, showError, tagChip, tagChips, tagPicker, toast } from '../ui.js';
 
 // Create (taskId omitted) or edit a shared task definition.
 export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
@@ -41,7 +41,10 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
     field('Descripció', description, 'Admet Markdown: títols, llistes, enllaços, imatges i blocs de codi.'),
     h('div', { class: 'field' }, h('label', {}, 'Etiquetes (opcional)'), tags.el,
       h('div', { class: 'hint' }, "Tria'n de suggerides o escriu-ne una de nova; es crea en desar la tasca.")),
-    h('div', { class: 'card-actions' }, save)
+    h('div', { class: 'card-actions' },
+      save,
+      // The version history used to hang off the read-only view; keep it one click away.
+      task ? h('button', { class: 'btn', type: 'button', onClick: () => openVersions(task.id).catch(showError) }, 'Historial de versions') : null)
   );
   const dialog = modal({ title: task ? 'Edita la tasca compartida' : 'Nova tasca compartida', body: form, wide: true });
 }
