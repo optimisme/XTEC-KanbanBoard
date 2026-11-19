@@ -1,6 +1,6 @@
 // Project listing ("Els meus projectes") and the project create/edit form.
 import { api } from '../api.js';
-import { append, field, h, modal, run } from '../ui.js';
+import { append, field, h, modal, run, toggleSwitch } from '../ui.js';
 
 const YEARS_AHEAD = 5;
 
@@ -97,22 +97,18 @@ export async function renderProjects(view, params, { user }) {
   let showArchived = showArchivedPreference();
 
   const archivedSection = h('div', {});
-  const toggle = h('button', { class: 'btn', type: 'button', 'aria-controls': 'archived-projects' });
-  archivedSection.id = 'archived-projects';
-
   function drawArchived() {
-    toggle.textContent = showArchived ? 'Amaga els arxivats' : `Mostra els arxivats (${archived.length})`;
-    toggle.setAttribute('aria-expanded', String(showArchived));
     archivedSection.replaceChildren();
-    if (showArchived) {
-      append(archivedSection,
-        h('h2', { style: { margin: '28px 0 12px' } }, 'Projectes arxivats'),
-        h('div', { class: 'grid' }, archived.map((p) => projectCard(p, user))));
-    }
+    if (!showArchived) return;
+    append(archivedSection,
+      h('h2', { style: { margin: '28px 0 12px' } }, 'Projectes arxivats'),
+      archived.length > 0
+        ? h('div', { class: 'grid' }, archived.map((p) => projectCard(p, user)))
+        : h('p', { class: 'muted' }, 'No hi ha cap projecte arxivat.'));
   }
-  toggle.addEventListener('click', () => {
-    showArchived = !showArchived;
-    rememberShowArchived(showArchived);
+  const toggle = toggleSwitch(`Mostra els arxivats (${archived.length})`, showArchived, (on) => {
+    showArchived = on;
+    rememberShowArchived(on);
     drawArchived();
   });
 
@@ -122,7 +118,7 @@ export async function renderProjects(view, params, { user }) {
         h('h1', {}, user.role === 'student' ? 'Els meus projectes' : 'Projectes'),
         user.role === 'teacher' ? h('p', { class: 'muted' }, 'Projectes que has creat o on tens docència assignada.') : null),
       h('div', { class: 'actions' },
-        archived.length > 0 ? toggle : null,
+        toggle,
         // Projects are created by teachers; administrators only oversee them.
         user.role === 'teacher'
           ? h('button', {
@@ -132,7 +128,7 @@ export async function renderProjects(view, params, { user }) {
           : null))
   );
 
-  if (projects.length === 0) {
+  if (active.length === 0 && archived.length === 0) {
     const text = {
       admin: 'Encara no hi ha cap projecte. Els crea el professorat.',
       teacher: "Encara no tens cap projecte. Crea'n un o demana a administració que t'assigni a un d'existent.",

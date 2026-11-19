@@ -33,7 +33,7 @@ export async function renderBlocked(view) {
         h('td', { class: 'actions' },
           h('button', {
             class: 'btn small', type: 'button',
-            onClick: () => openTaskModal(t.group_task_id, { onChange: () => load().catch(showError) }).catch(showError),
+            onClick: () => openTaskModal(t.group_task_id, { readOnly: true }).catch(showError),
           }, 'Obre'))))))));
   }
 

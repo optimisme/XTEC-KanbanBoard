@@ -2,7 +2,7 @@
 // "move to" control on every card. Cards always follow the global task order.
 import { api } from '../api.js';
 import {
-  append, avatar, clear, formatDateTime, h, icon, tagChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
+  append, avatar, clear, formatDateTime, h, icon, toggleSwitch, tagChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
 } from '../ui.js';
 import { changeTaskStatus, openTaskModal } from './taskModal.js';
 
@@ -11,6 +11,12 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
   const boardEl = h('div', { class: 'board' });
   const infoEl = h('div', { class: 'board-info' });
   let dragged = null;
+  // Teachers and administrators see the board read-only until they switch
+  // editing on, so a group's work is never changed by a stray click or drag.
+  // Students always work on their own board. Editing is off again every time
+  // the board is opened.
+  let editing = !board.can_manage;
+  const canEdit = () => editing && board.project.status === 'active';
 
   async function refresh() {
     board = await api.get(`/api/groups/${groupId}/board`);
@@ -32,13 +38,13 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
   function openTask(id) {
     if (opening) return; // Ignore double clicks while the dialog loads.
     opening = true;
-    openTaskModal(id, { onChange: () => refresh().catch(showError) })
+    openTaskModal(id, { onChange: () => refresh().catch(showError), readOnly: !canEdit() })
       .catch(showError)
       .finally(() => { opening = false; });
   }
 
   function card(task) {
-    const canMove = task.allowed_transitions.length > 0;
+    const canMove = canEdit() && task.allowed_transitions.length > 0;
     const moveSelect = canMove
       ? h('select', { 'aria-label': `Canvia l'estat de «${task.title}»` },
           h('option', { value: '' }, 'Mou a…'),
@@ -118,7 +124,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
 
   function draw() {
     const { group } = board;
-    const canSetGithub = board.project.status === 'active' && board.access !== 'teacher';
+    const canSetGithub = canEdit() && board.access !== 'teacher';
     const githubButton = h('button', { class: 'btn small', type: 'button' }, group.github_url ? 'Canvia' : 'Configura el repositori');
     githubButton.addEventListener('click', async () => {
       const url = await promptDialog({
@@ -156,7 +162,11 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
           h('a', { href: '#/' }, user.role === 'student' ? 'Els meus projectes' : 'Projectes'), ' / ',
           h('a', { href: `#/projects/${board.project.id}` }, board.project.name)),
         h('h1', {}, `Grup ${board.group.group_number}`)),
-      board.project.status === 'archived' ? h('span', { class: 'tag' }, 'Projecte arxivat · només lectura') : null),
+      board.project.status === 'archived'
+        ? h('span', { class: 'tag' }, 'Projecte arxivat · només lectura')
+        : board.can_manage
+          ? toggleSwitch("Permet l'edició", editing, (on) => { editing = on; draw(); })
+          : null),
     infoEl,
     board.tasks.length === 0 ? h('div', { class: 'notice' }, 'Aquest projecte encara no té tasques.') : null,
     boardEl

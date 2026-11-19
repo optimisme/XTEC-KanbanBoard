@@ -67,7 +67,9 @@ export function historyItem(event, { withTask = false } = {}) {
       : null);
 }
 
-export async function openTaskModal(groupTaskId, { onChange = () => {} } = {}) {
+// `readOnly` shows everything but offers no way to change the task (used for
+// teachers and administrators unless they switched editing on in the board).
+export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly = false } = {}) {
   let task = await api.get(`/api/group-tasks/${groupTaskId}`);
   let activeTab = 'description';
   const content = h('div', { class: 'task-detail' });
@@ -83,7 +85,7 @@ export async function openTaskModal(groupTaskId, { onChange = () => {} } = {}) {
   function sidePanel() {
     // Moves out of "En curs" (back to pending, block, complete) are made on
     // the board itself; the dialog offers the remaining ones.
-    const stateButtons = task.status === 'in_progress' ? [] : task.allowed_transitions.map((target) => {
+    const stateButtons = readOnly || task.status === 'in_progress' ? [] : task.allowed_transitions.map((target) => {
       const key = `${task.status}>${target}`;
       const button = h('button', { class: `btn ${ACTION_LABELS[key] ? 'primary' : ''}`, type: 'button' },
         ACTION_LABELS[key] || `Mou a «${STATUS_LABELS[target]}»`);
@@ -92,7 +94,7 @@ export async function openTaskModal(groupTaskId, { onChange = () => {} } = {}) {
     });
 
     let transfer = null;
-    if (task.can_transfer) {
+    if (task.can_transfer && !readOnly) {
       const candidates = task.members.filter((m) => !task.responsible || m.id !== task.responsible.id);
       const select = h('select', { 'aria-label': 'Nova persona responsable' },
         h('option', { value: '' }, 'Tria una persona…'),
@@ -118,12 +120,16 @@ export async function openTaskModal(groupTaskId, { onChange = () => {} } = {}) {
         h('div', { class: 'person' }, statusBadge(task.status)),
         task.block_reason ? h('div', { class: 'block-reason' }, icon('blocked'), h('span', {}, task.block_reason)) : null,
         stateButtons.length ? h('div', { class: 'stack' }, stateButtons) : null,
-        task.project.status === 'archived' ? h('p', { class: 'muted' }, 'Projecte arxivat: només lectura.') : null),
+        task.project.status === 'archived' ? h('p', { class: 'muted' }, 'Projecte arxivat: només lectura.') : null,
+        readOnly && task.project.status !== 'archived'
+          ? h('p', { class: 'muted' }, 'Mode de consulta. Per modificar la tasca, ',
+              h('a', { href: `#/groups/${task.group.id}` }, 'obre el tauler del grup'), " i activa «Permet l'edició».")
+          : null),
       h('section', {},
         h('h3', {}, 'Responsable'),
         task.responsible
           ? h('div', { class: 'person' }, avatar(task.responsible.name), h('span', {}, task.responsible.name))
-          : h('p', { class: 'muted' }, 'Sense responsable. Qui comenci la tasca en serà responsable.'),
+          : h('p', { class: 'muted' }, readOnly ? 'Sense responsable.' : 'Sense responsable. Qui comenci la tasca en serà responsable.'),
         transfer),
       task.status === 'completed' && task.completed_by
         ? h('section', {},
@@ -156,7 +162,7 @@ export async function openTaskModal(groupTaskId, { onChange = () => {} } = {}) {
     });
 
     let form = null;
-    if (task.can_contribute) {
+    if (task.can_contribute && !readOnly) {
       const text = h('textarea', { rows: '2', maxlength: '5000', required: true, placeholder: 'Escriu un comentari…', 'aria-label': 'Comentari nou' });
       const send = h('button', { class: 'btn primary', type: 'submit' }, 'Comenta');
       form = h('form', {

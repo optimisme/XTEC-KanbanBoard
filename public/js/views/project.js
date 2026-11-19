@@ -309,7 +309,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
                 return h('td', {},
                   h('button', {
                     class: `cell ${cell.status}`, type: 'button', title: label, 'aria-label': label,
-                    onClick: () => openTaskModal(cell.group_task_id, { onChange: () => draw().catch(showError) }).catch(showError),
+                    onClick: () => openTaskModal(cell.group_task_id, { readOnly: true }).catch(showError),
                   }, icon(cell.status)));
               })))))),
         h('div', { class: 'legend' }, STATUSES.map(statusBadge))

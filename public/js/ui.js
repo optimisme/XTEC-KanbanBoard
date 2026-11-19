@@ -326,6 +326,14 @@ export function field(label, control, hint) {
   return h('div', { class: 'field' }, h('label', { for: id }, label), control, hint ? h('div', { class: 'hint' }, hint) : null);
 }
 
+// An on/off switch with its label. `onChange(checked)` runs on every change.
+export function toggleSwitch(label, checked, onChange) {
+  const input = h('input', { type: 'checkbox', role: 'switch' });
+  input.checked = checked;
+  input.addEventListener('change', () => onChange(input.checked));
+  return h('label', { class: 'switch' }, input, h('span', { class: 'switch-track', 'aria-hidden': 'true' }), h('span', {}, label));
+}
+
 // A text box for searching or typing something the browser should not try to
 // fill in by itself. Browsers treat autocomplete="off" as a hint, so several
 // signals are combined: a search field, a name that is different every time
