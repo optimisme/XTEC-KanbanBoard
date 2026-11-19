@@ -1,72 +1,286 @@
-# Educational Kanban
+# Kanban educatiu
 
-A Kanban management application for vocational training institutes. Teachers
-define the tasks of a project once; every project group gets the same tasks,
-in the same order, and tracks its own progress on an independent board.
+Una aplicació Kanban pensada per als projectes de formació professional. El
+professorat defineix **una sola vegada** les tasques d'un projecte; cada grup
+d'alumnes rep les mateixes tasques, en el mateix ordre, i en segueix el
+progrés en un tauler propi.
 
-- **Administrators** manage users and can do everything in every project.
-- **Teachers** create projects and fully manage the ones they created or are assigned to: tasks, task order, groups and students.
-- **Students** work on their own group's board.
+![Tauler d'un grup, amb les tasques repartides en les columnes Pendent, En curs, Bloquejat i Finalitzat](assets/06-tauler.png)
 
-The user interface is entirely in **Catalan**. Code, database and documentation are in English.
+- **Alumnat**: treballa al tauler del seu grup, es fa responsable de tasques,
+  hi afegeix col·laboradors, comenta i avisa quan una tasca queda bloquejada.
+- **Professorat**: crea projectes, tasques i grups, i veu d'un cop d'ull com
+  avança cada grup i què ha fet cada alumne.
+- **Administració**: gestiona els comptes i supervisa tots els projectes.
 
-## Contents
+La interfície és íntegrament en **català**. El codi, la base de dades i la
+[documentació d'arquitectura](docs/architecture.md) són en anglès.
 
-1. [Technology stack](#technology-stack)
-2. [Requirements](#requirements)
-3. [Installation](#installation)
-4. [Database](#database)
-5. [Configuration (.env)](#configuration-env)
-6. [Institutional OAuth setup](#institutional-oauth-setup)
-7. [Initial administrator](#initial-administrator)
-8. [Development server](#development-server)
-9. [Running tests](#running-tests)
-10. [Production deployment](#production-deployment)
-11. [User roles](#user-roles)
-12. [Task states and assignment](#task-states-and-assignment)
-13. [Markdown import](#markdown-import)
-14. [Project duplication](#project-duplication)
-15. [REST API overview](#rest-api-overview)
-16. [Repository structure](#repository-structure)
+> Totes les captures d'aquest document s'han fet amb dades inventades:
+> les persones, els correus, els projectes i els repositoris no existeixen.
 
-Architecture decisions are documented in [docs/architecture.md](docs/architecture.md).
+## Continguts
 
-## Technology stack
+1. [Un passeig per l'eina](#un-passeig-per-leina)
+2. [Com funciona](#com-funciona)
+3. [Rols i permisos](#rols-i-permisos)
+4. [Tecnologia](#tecnologia)
+5. [Posada en marxa en local](#posada-en-marxa-en-local)
+6. [Configuració (.env)](#configuració-env)
+7. [Inici de sessió institucional](#inici-de-sessió-institucional)
+8. [La primera persona administradora](#la-primera-persona-administradora)
+9. [Proves automàtiques](#proves-automàtiques)
+10. [Desplegament en producció](#desplegament-en-producció)
+11. [Seguretat](#seguretat)
+12. [API REST](#api-rest)
+13. [Estructura del repositori](#estructura-del-repositori)
 
-| Layer | Technology |
+## Un passeig per l'eina
+
+### Entrada
+
+S'hi entra amb el compte institucional (Google Workspace o Microsoft Entra ID).
+Qui ho prefereixi pot definir una contrasenya al seu perfil i entrar amb el
+correu.
+
+![Pantalla d'inici de sessió](assets/01-inici-sessio.png)
+
+### Projectes
+
+Cada persona veu només els seus projectes: el professorat, els que ha creat o
+on té docència assignada; l'alumnat, aquells on forma part d'un grup. Els
+projectes arxivats queden amagats darrere d'un interruptor.
+
+![Llista de projectes d'una professora](assets/02-projectes.png)
+
+### Matriu de progrés
+
+És la primera pantalla que veu el professorat en obrir un projecte: una fila
+per grup i una columna per tasca, amb l'estat de cadascuna. Es pot filtrar
+per etiqueta.
+
+![Matriu de progrés amb tres grups i onze tasques](assets/03-matriu.png)
+
+### Tasques compartides
+
+Les tasques es defineixen una vegada per a tot el projecte, amb una descripció
+en Markdown i etiquetes de colors. L'ordre de la llista és la prioritat: no hi
+ha nivells de prioritat a part. També es poden importar d'un fitxer Markdown.
+
+![Llista de tasques del projecte amb les seves etiquetes](assets/04-tasques.png)
+
+### Grups
+
+Els grups s'omplen escrivint el correu institucional de cada alumne. Cada grup
+té el seu tauler, el seu repositori de GitHub i una barra que en resumeix el
+progrés.
+
+![Grups del projecte amb el seu progrés](assets/05-grups.png)
+
+### Tauler del grup
+
+L'alumnat mou les tasques entre les columnes. Qui comença una tasca sense
+responsable en queda com a responsable automàticament. Una tasca bloquejada
+mostra el motiu a la mateixa targeta.
+
+![Tauler Kanban d'un grup](assets/06-tauler.png)
+
+### Detall d'una tasca
+
+Cada tasca té la descripció, els comentaris, els bloquejos i l'historial
+complet de tot el que hi ha passat. La persona responsable pot traspassar-la
+a un company o afegir-hi col·laboradors.
+
+![Diàleg amb el detall d'una tasca](assets/07-tasca.png)
+
+### Tasques bloquejades
+
+El professorat té una pantalla amb totes les tasques bloquejades dels seus
+projectes, amb el motiu i el temps que fa que estan aturades.
+
+![Llista de tasques bloquejades](assets/09-tasques-bloquejades.png)
+
+### Activitat de cada alumne
+
+Ser responsable d'una tasca no demostra haver-ne fet tota la feina. Aquesta
+vista separa la responsabilitat de les accions realment registrades: tasques
+finalitzades, col·laboracions, comentaris, bloquejos i traspassos.
+
+![Activitat d'un alumne dins d'un projecte](assets/10-activitat-alumne.png)
+
+### Usuaris
+
+L'administració aprova els comptes nous, afegeix persones per avançat, en
+canvia el rol i les pot desactivar.
+
+![Gestió d'usuaris](assets/08-usuaris.png)
+
+## Com funciona
+
+### Estats i assignació de tasques
+
+Cada grup té el seu propi estat per a cada tasca compartida: **Pendent**,
+**En curs**, **Bloquejat** o **Finalitzat**.
+
+```text
+Pendent ──▶ En curs ──▶ Finalitzat
+              ▲  │  ▲         │
+              │  ▼  └─────────┘  (reobrir)
+              │ Bloquejat
+              └── Pendent (tornar enrere)
+```
+
+El professorat i l'administració també poden corregir una tasca a qualsevol
+altre estat. Als taulers dels grups entren en mode de només lectura i han
+d'activar l'interruptor *Permet l'edició* per fer canvis.
+
+- **La prioritat és la posició a la llista de tasques.** Tots els taulers
+  segueixen aquest ordre. L'excepció és la columna *Finalitzat*, que mostra les
+  tasques en l'ordre en què s'han acabat.
+- **Assignació automàtica**: quan un alumne passa a *En curs* una tasca sense
+  responsable, en queda com a responsable en el mateix pas. Dos alumnes que ho
+  facin alhora no poden quedar tots dos com a responsables.
+- Una tasca té **com a màxim una** persona responsable, que ho continua sent
+  encara que la tasca es bloquegi, es finalitzi o es reobri.
+- **Col·laboradors**: la persona responsable pot afegir altres membres del
+  grup que hi treballen amb ella, i treure'ls. Una tasca sense responsable no
+  té col·laboradors.
+- **Traspassos**: la persona responsable pot passar la tasca a un altre membre
+  del grup. El professorat pot reassignar-la o deixar-la sense responsable.
+- **Finalització**: qualsevol membre del grup pot finalitzar una tasca. Qui
+  l'ha finalitzada es desa a part de qui n'és responsable.
+- **Bloqueig**: cal indicar-ne el motiu. Cada bloqueig es desa amb qui l'ha
+  obert, qui l'ha tancat, quan i quant ha durat.
+- Totes les accions queden a l'historial de la tasca, que no es pot modificar.
+
+### Etiquetes
+
+Les etiquetes classifiquen i acoloreixen les tasques, i pertanyen a un sol
+projecte. Una tasca en pot tenir tantes com calgui, o cap. No donen ni treuen
+permisos.
+
+- Es creen escrivint un nom nou mentre s'edita una tasca; l'editor suggereix
+  les del projecte i les que la persona ha fet servir en altres projectes.
+- Una etiqueta nova rep un color automàticament. Noms, colors i eliminacions
+  es gestionen a la pestanya *Configuració* del projecte.
+- Eliminar una etiqueta només la treu de les tasques que la tenien.
+
+### Importació de tasques en Markdown
+
+Mentre un projecte **encara no té cap tasca**, se'n pot importar la llista
+inicial des d'un document Markdown. La pestanya *Tasques* ofereix la importació
+i una plantilla; [examples/tasks-example.md](examples/tasks-example.md) en
+mostra el format:
+
+```markdown
+## Crear el repositori de GitHub
+
+**Tags:** Programació
+
+Creeu el repositori de GitHub del grup.
+
+---
+
+## Dissenyar la base de dades
+
+**Tags:** Bases de dades, Programació
+
+Creeu l'esquema relacional de la base de dades.
+
+---
+
+## Presentar el projecte
+
+Una tasca sense etiquetes.
+```
+
+- Cada títol `##` és una tasca; l'ordre del document és l'ordre global.
+- La línia `**Tags:**` és opcional (també s'accepta `**Etiquetes:**`). Les
+  etiquetes que el projecte encara no té es creen en importar.
+- La resta del text sota el títol és la descripció de la tasca.
+- Abans d'importar es mostra una previsualització amb errors i avisos.
+- La importació és atòmica: si hi ha algun error, no es crea res.
+
+### Duplicar un projecte
+
+Des de *Configuració* es pot duplicar un projecte per a un altre curs. La
+còpia rep el nom i la descripció (editables), les etiquetes i les tasques amb
+el seu ordre. **No** rep professorat, grups, alumnat, repositoris, estats,
+responsables, comentaris, bloquejos ni historial.
+
+### Arxivar i esborrar projectes
+
+Quan un projecte s'acaba, s'**arxiva**: queda en només lectura, amb tot el seu
+historial, sota *Projectes arxivats*, i es pot reactivar.
+
+Només l'administració pot **esborrar** un projecte, i només si ja està
+arxivat. Esborrar és definitiu: s'eliminen les tasques, etiquetes, grups,
+progrés, comentaris i historial (els comptes d'usuari es conserven).
+
+### Afegir persones
+
+- **Alumnat a un grup**: s'escriu el correu institucional de cada alumne. Si
+  encara no té compte, el formulari en demana el nom i el crea; l'alumne ja
+  podrà entrar amb aquell correu sense esperar cap aprovació.
+- **Professorat a un projecte**: de la mateixa manera, per correu. Un compte
+  d'alumne no es converteix mai en professor per aquesta via.
+- **Per avançat**: l'administració pot afegir qualsevol persona des
+  d'*Usuaris → Afegeix un usuari*, amb nom, correu i rol.
+- Qui entra sense haver estat afegit abans queda **pendent d'aprovació**.
+
+## Rols i permisos
+
+| Acció | Administració | Professorat (del projecte) | Alumnat (del grup) |
+|---|:-:|:-:|:-:|
+| Gestionar usuaris (rols, aprovacions, desactivar comptes) | ✔ | | |
+| Esborrar definitivament un projecte arxivat | ✔ | | |
+| Crear projectes | | ✔ | |
+| Editar, arxivar i duplicar un projecte | ✔ | ✔ | |
+| Afegir o treure professorat del projecte | ✔ | ✔ | |
+| Crear i gestionar les etiquetes | ✔ | ✔ | |
+| Crear grups i afegir-hi o treure'n alumnat | ✔ | ✔ | |
+| Crear, editar, eliminar i reordenar tasques; importar Markdown | ✔ | ✔ | |
+| Veure tots els grups, la matriu i l'activitat de l'alumnat | ✔ | ✔ | |
+| Canviar qualsevol estat i reassignar responsables | ✔ | ✔ | |
+| Moure tasques pel tauler, bloquejar, desbloquejar i finalitzar | ✔ | ✔ | ✔ |
+| Comentar les tasques | ✔ | ✔ | ✔ |
+| Traspassar una tasca pròpia a un company del grup | | | ✔ |
+| Gestionar els col·laboradors d'una tasca pròpia | ✔ | ✔ | ✔ |
+| Configurar el repositori de GitHub del grup | ✔ | | ✔ |
+
+L'accés del professorat depèn **només** d'estar assignat al projecte. Qui crea
+o duplica un projecte hi queda assignat automàticament, i un professor no es
+pot treure a si mateix. Totes les regles es comproven al servidor, no només a
+la interfície.
+
+## Tecnologia
+
+| Capa | Tecnologia |
 |---|---|
-| Backend | Node.js (ES modules) + Express 5 |
-| Database | MySQL 8, InnoDB, accessed with `mysql2` and parameterized queries |
-| Authentication | OpenID Connect (`openid-client`): Google Workspace or Microsoft Entra ID |
-| Sessions | `express-session` stored in MySQL (`express-mysql-session`) |
-| Frontend | HTML, CSS and vanilla JavaScript modules (no framework, no build step) |
-| Markdown | `marked` + `sanitize-html` (rendered and sanitized on the server) |
-| Tests | Node.js test runner (`node --test`) + `supertest` |
+| Servidor | Node.js (mòduls ES) + Express 5 |
+| Base de dades | MySQL 8 (InnoDB), amb `mysql2` i consultes parametritzades |
+| Autenticació | OpenID Connect (`openid-client`): Google Workspace o Microsoft Entra ID |
+| Sessions | `express-session` desades a MySQL |
+| Interfície | HTML, CSS i JavaScript sense cap framework ni pas de compilació |
+| Markdown | `marked` + `sanitize-html` (es converteix i es neteja al servidor) |
+| Proves | L'executor de proves de Node.js (`node --test`) + `supertest` |
 
-## Requirements
+## Posada en marxa en local
 
-- Node.js 20.12 or newer
-- MySQL 8 (a ready-to-use Docker setup is included for local work)
-- An OpenID Connect client (Google Workspace or Microsoft Entra ID) for real logins
-
-## Installation
+Cal Node.js 20.12 o posterior i Docker (o un MySQL 8 propi).
 
 ```bash
 npm install
-cp .env.example .env      # then edit .env (see below)
+cp .env.example .env        # i edita'l (vegeu l'apartat següent)
+docker compose up -d        # MySQL local
+npm run migrate             # crea les taules
+npm run dev                 # es reinicia quan canvia un fitxer
 ```
 
-## Database
+Obre <http://localhost:3000>.
 
-### Local MySQL with Docker
-
-```bash
-docker compose up -d
-```
-
-This starts MySQL 8.4 on `127.0.0.1:3307` with two empty databases, `kanban_dev`
-and `kanban_test` (root password `kanban_root_test`, local use only). Matching
-`.env` values:
+`docker compose` engega MySQL 8.4 a `127.0.0.1:3307` amb dues bases de dades
+buides, `kanban_dev` i `kanban_test`. Els valors del `.env` que hi corresponen:
 
 ```dotenv
 DB_HOST=127.0.0.1
@@ -76,165 +290,107 @@ DB_USER=root
 DB_PASSWORD=kanban_root_test
 ```
 
-### Existing MySQL server
+Per provar-ho sense proveïdor d'identitat, posa `DEV_AUTH_ENABLED=true`: el
+formulari d'entrada accepta qualsevol correu dels dominis permesos sense
+contrasenya, amb les mateixes regles de registre i aprovació. **El servidor
+es nega a arrencar amb aquesta opció si `NODE_ENV=production`.**
 
-```sql
-CREATE DATABASE kanban CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'kanban'@'localhost' IDENTIFIED BY '<a strong password>';
-GRANT ALL PRIVILEGES ON kanban.* TO 'kanban'@'localhost';
-```
+`npm run migrate` aplica els fitxers pendents de `migrations/`. Cal executar-lo
+després d'instal·lar i després de cada actualització.
 
-### Migrations
+## Configuració (.env)
 
-```bash
-npm run migrate
-```
+Tots els valors propis de cada instal·lació i tots els secrets viuen al fitxer
+`.env`, que Git ignora. [.env.example](.env.example) en llista totes les
+variables. El servidor valida la configuració en arrencar i s'atura si falta
+alguna cosa.
 
-Applies every pending file in `migrations/` (tracked in the `schema_migrations`
-table). Run it after installing and after every update.
-
-## Configuration (.env)
-
-All deployment-specific and secret values live in `.env`, which is ignored by
-Git. `.env.example` lists every variable. The server validates the
-configuration at startup and refuses to start when something is missing.
-
-| Variable | Purpose |
+| Variable | Per a què serveix |
 |---|---|
-| `NODE_ENV` | `development`, `production` or `test` |
-| `APP_NAME` | Name shown in the page title, header and login screen |
-| `PORT`, `APP_URL` | Listening port and public base URL |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | MySQL connection |
-| `OIDC_PROVIDER` | `google` or `microsoft` |
-| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Identity provider client |
-| `OIDC_CALLBACK_URL` | Registered redirect URI. The callback route is served on its path |
-| `ALLOWED_EMAIL_DOMAIN` | Institutional domain(s), comma separated |
-| `INITIAL_ADMIN_EMAIL` | Account that becomes administrator on its first login |
-| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Optional administrator with password login |
-| `SESSION_SECRET` | At least 32 random characters |
-| `DEV_AUTH_ENABLED` | Development-only login (see below) |
+| `NODE_ENV` | `development`, `production` o `test` |
+| `APP_NAME` | Nom que es mostra al títol, la capçalera i la pantalla d'entrada |
+| `PORT`, `APP_URL` | Port d'escolta i URL pública |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Connexió a MySQL |
+| `OIDC_PROVIDER` | `google` o `microsoft` |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Client del proveïdor d'identitat |
+| `OIDC_CALLBACK_URL` | URI de redirecció registrada |
+| `ALLOWED_EMAIL_DOMAIN` | Dominis institucionals permesos, separats per comes |
+| `INITIAL_ADMIN_EMAIL` | Compte que esdevé administrador en entrar per primer cop |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Administrador opcional amb usuari i contrasenya |
+| `SESSION_SECRET` | Com a mínim 32 caràcters aleatoris |
+| `DEV_AUTH_ENABLED` | Entrada de desenvolupament, sense proveïdor d'identitat |
 
-Generate a session secret with:
+Per generar el secret de sessió:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Functional configuration, such as tag colors, is stored in MySQL.
+## Inici de sessió institucional
 
-## Institutional OAuth setup
-
-Only accounts whose **verified** email belongs to `ALLOWED_EMAIL_DOMAIN` can
-register. The email and the stable subject identifier are always taken from
-the ID token validated by the server, never from the browser.
+Només es poden registrar els comptes amb un correu **verificat** d'algun dels
+dominis d'`ALLOWED_EMAIL_DOMAIN`. El correu i l'identificador de la persona es
+llegeixen sempre del testimoni validat pel servidor, mai del navegador.
 
 ### Google Workspace
 
-1. In Google Cloud Console create an **OAuth client ID** of type *Web application*.
-2. Add the redirect URI, for example `https://kanban.ieti.site/auth/google/callback`.
-3. Configure:
+1. A Google Cloud Console, crea un **ID de client OAuth** de tipus *Aplicació web*.
+2. Afegeix-hi la URI de redirecció, per exemple `https://kanban.exemple.cat/auth/callback`.
+3. Configura:
 
 ```dotenv
 OIDC_PROVIDER=google
 OIDC_ISSUER=https://accounts.google.com
-OIDC_CLIENT_ID=<client id>
-OIDC_CLIENT_SECRET=<client secret>
-OIDC_CALLBACK_URL=https://kanban.ieti.site/auth/google/callback
-ALLOWED_EMAIL_DOMAIN=xtec.cat,iesesteveterradas.cat
+OIDC_CLIENT_ID=<id de client>
+OIDC_CLIENT_SECRET=<secret de client>
+OIDC_CALLBACK_URL=https://kanban.exemple.cat/auth/callback
+ALLOWED_EMAIL_DOMAIN=exemple.cat
 ```
-
-Google accounts must have `email_verified` set, and the hosted domain (`hd`),
-when present, must be one of the allowed domains.
 
 ### Microsoft Entra ID
 
-1. Register an application (single tenant) and add a *Web* redirect URI.
-2. Create a client secret.
-3. Configure:
+1. Registra una aplicació (d'un sol inquilí) amb una URI de redirecció *Web*.
+2. Crea-hi un secret de client.
+3. Configura:
 
 ```dotenv
 OIDC_PROVIDER=microsoft
-OIDC_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
-OIDC_CLIENT_ID=<application id>
-OIDC_CLIENT_SECRET=<client secret>
-OIDC_CALLBACK_URL=https://kanban.example/auth/callback
+OIDC_ISSUER=https://login.microsoftonline.com/<id-inquilí>/v2.0
+OIDC_CLIENT_ID=<id d'aplicació>
+OIDC_CLIENT_SECRET=<secret de client>
+OIDC_CALLBACK_URL=https://kanban.exemple.cat/auth/callback
 ```
 
-The issuer must be tenant-specific (`common`, `organizations` and `consumers`
-are rejected). The account's user principal name is used as its email.
+L'emissor ha de ser el d'un inquilí concret: `common`, `organizations` i
+`consumers` es rebutgen.
 
-### Development login
+## La primera persona administradora
 
-When no identity provider is available, set `DEV_AUTH_ENABLED=true` in a
-non-production `.env`. The login form then signs in any email of the allowed
-domains without a password, following exactly the same registration and
-approval rules. It is the same single form used by the administrator account:
-an email is treated as a development account, anything else as the
-administrator's username. **The server refuses to start with `DEV_AUTH_ENABLED=true` and
-`NODE_ENV=production`**, and the route does not exist in production.
+Tot compte nou comença com a *pendent* i l'ha d'aprovar algú. Hi ha tres
+maneres de tenir la primera persona administradora:
 
-## Initial administrator
-
-Every new account starts as *pending* and needs an administrator. There are
-two ways to get the first one:
-
-- **Environment variable**: set `INITIAL_ADMIN_EMAIL=name@institute.example`.
-  That account becomes an active administrator on its first institutional login.
-- **Command line** (on the server, with access to the database):
+- **Variable d'entorn**: `INITIAL_ADMIN_EMAIL=nom@exemple.cat`. Aquell compte
+  passa a ser administrador en entrar per primer cop.
+- **Línia d'ordres**, al servidor:
 
   ```bash
-  npm run create-admin -- name@institute.example
+  npm run create-admin -- nom@exemple.cat
   ```
 
-  The account is created (or promoted) as an active administrator and is bound
-  to the institutional identity the first time it logs in.
+- **Usuari i contrasenya**: amb `ADMIN_USERNAME` i `ADMIN_PASSWORD` al `.env`
+  hi ha un administrador integrat que no necessita el proveïdor d'identitat.
+  En producció la contrasenya ha de tenir almenys 12 caràcters i no pot
+  contenir el nom d'usuari.
 
-- **Username and password** (optional): set `ADMIN_USERNAME` and
-  `ADMIN_PASSWORD` in `.env`. The login form then accepts that username and
-  password and signs in as a built-in administrator, without the identity
-  provider. Leave both variables empty to disable it.
-  - The account is always an active administrator; it cannot be locked out
-    from the user screen.
-  - In production the server refuses to start unless the password has at
-    least 12 characters and does not contain the username.
-  - After 5 failed attempts an address is locked out for 15 minutes.
+La resta d'administradors es nomenen des d'**Usuaris**, dins l'aplicació.
 
-Further administrators are appointed from **Usuaris** inside the application.
+## Proves automàtiques
 
-### Adding students to a group
+Les proves fan servir una base de dades i un fitxer de configuració propis,
+`.env.test` (ignorat per Git). **No s'executen si `DB_NAME` no acaba en
+`_test`**, de manera que mai poden tocar dades reals.
 
-Teachers and administrators fill a group by typing each student's
-institutional email. If the email already has a student account, the student
-is added. If it does not, the form asks for the student's name and creates
-the account; the student then signs in with that email without approval. A
-student whose account was still pending becomes active when added to a group.
-
-### Adding people in advance
-
-An administrator can add a person from **Usuaris → Afegeix un usuari** with
-their name, institutional email and role. The account is active immediately
-and can already be assigned to projects and groups. When that person signs in
-with the identity provider for the first time, the verified email links the
-account to their identity, so they get in without the approval step. People
-who are not added in advance still start as *pending*.
-
-## Development server
-
-```bash
-docker compose up -d      # local MySQL
-npm run migrate
-npm run dev               # restarts on file changes
-```
-
-Open <http://localhost:3000>.
-
-## Running tests
-
-Tests use their own database and their own configuration file, `.env.test`
-(ignored by Git). The configuration **refuses to run tests unless `DB_NAME`
-ends in `_test`**, so tests can never touch real data.
-
-Create `.env.test`:
+Crea `.env.test`:
 
 ```dotenv
 NODE_ENV=test
@@ -253,291 +409,139 @@ ADMIN_PASSWORD=test-admin-password
 DEV_AUTH_ENABLED=true
 ```
 
-Then:
+I després:
 
 ```bash
 docker compose up -d
 npm test
 ```
 
-The suite applies the migrations, empties the test database and covers the
-business rules: approval flow, project and group access, shared task
-propagation, global ordering, automatic assignment, transfers, blocking,
-completion and reopening, Markdown import, versioning, duplication, archived
-projects and concurrent updates.
+Les proves cobreixen les regles de negoci: aprovació de comptes, accés a
+projectes i grups, propagació de les tasques, ordre global, assignació
+automàtica, traspassos, col·laboradors, bloquejos, finalització i reobertura,
+importació, versions, duplicació, projectes arxivats, contrasenyes i canvis
+simultanis.
 
-## Production deployment
+## Desplegament en producció
 
-General requirements:
+Requisits generals:
 
-1. `NODE_ENV=production`, a strong `SESSION_SECRET`, real `OIDC_*` values and `DEV_AUTH_ENABLED=false`.
-   While the identity provider credentials are not available, the server also
-   starts with only `ADMIN_USERNAME` and `ADMIN_PASSWORD` set; then only the
-   administrator can sign in.
-2. Serve the application behind an HTTPS reverse proxy. Session cookies are
-   `Secure` in production and the app trusts one proxy hop (`X-Forwarded-*`).
-3. `npm ci --omit=dev`, `npm run migrate`, then `npm start` under a process manager.
-4. Back up the MySQL database regularly.
+1. `NODE_ENV=production`, un `SESSION_SECRET` robust, els valors `OIDC_*`
+   reals i `DEV_AUTH_ENABLED=false`.
+2. Servir l'aplicació darrere d'un servidor intermediari amb HTTPS. Les galetes
+   de sessió són `Secure` en producció i l'aplicació confia en un sol salt de
+   proxy (`X-Forwarded-*`).
+3. `npm ci --omit=dev`, `npm run migrate` i `npm start` sota un gestor de processos.
+4. Fer còpies de seguretat de la base de dades amb regularitat.
 
-### kanban.ieti.site (Proxmox)
+### Contenidor Proxmox
 
-The `proxmox/` folder contains the deployment scripts for the institute's
-Proxmox container.
+La carpeta [proxmox/](proxmox) conté els scripts de desplegament en un
+contenidor Proxmox.
 
-1. Copy `proxmox/config.env.example` to `proxmox/config.env` and set the SSH
-   port and user of the **kanban** container. `config.env` is ignored by Git.
-2. Create the server's configuration from `.env.example` in a local file named
-   `kanban.env` (do not commit it) and send it:
+1. Copia `proxmox/config.env.example` a `proxmox/config.env` i posa-hi el
+   port SSH i l'usuari del contenidor. Git ignora aquest fitxer.
+2. Crea la configuració del servidor a partir de `.env.example` en un fitxer
+   local `kanban.env` (no el pugis al repositori) i envia'l:
 
    ```bash
    cd proxmox && ./proxmoxSendFile.sh ../kanban.env
    ```
 
-3. Prepare the server once. It installs what is missing (MySQL, curl, Node.js,
-   pm2) and creates the database and MySQL user named in `kanban.env`. The
-   server asks for the sudo password in your terminal:
+3. Prepara el servidor una sola vegada. Instal·la el que falti (MySQL, Node.js,
+   pm2) i crea la base de dades:
 
    ```bash
    cd proxmox && ./proxmoxInstall.sh
    ```
 
-4. Deploy the committed and pushed `main` branch:
+4. Desplega la branca `main`, ja pujada al repositori:
 
    ```bash
    cd proxmox && ./proxmoxDeploy.sh
    ```
 
-   The script packages only committed files, keeps the server's `.env`, dumps the database before migrating, runs the migrations,
-   restarts the app with pm2, checks `/health` and rolls the code back if the
-   new version does not start. `DEPLOY_DRY_RUN=1 ./proxmoxDeploy.sh` only
-   builds and verifies the package. If `~/nodejs_server` already holds a different
-   application, the deploy stops; `DEPLOY_REPLACE_EXISTING=1 ./proxmoxDeploy.sh`
-   moves that application aside and installs this one.
+   L'script empaqueta només els fitxers del repositori, conserva el `.env` del
+   servidor, fa una còpia de la base de dades abans de migrar, aplica les
+   migracions, reinicia l'aplicació amb pm2, comprova `/health` i torna al
+   codi anterior si la versió nova no arrenca.
+   `DEPLOY_DRY_RUN=1 ./proxmoxDeploy.sh` només construeix i verifica el paquet.
 
-| Script | Purpose |
+| Script | Què fa |
 |---|---|
-| `proxmoxInstall.sh` | One-time server preparation (asks for the sudo password) |
-| `proxmoxDeploy.sh` | Deploy `main` with backup, migrations and health check |
-| `proxmoxBackup.sh` | Download a database dump and the server `.env` into `backups/` |
-| `proxmoxConnect.sh` | Open an SSH session |
-| `proxmoxSendFile.sh` | Copy one file to the server |
-| `proxmoxSetupRedirect80.sh` / `proxmoxSetupRedirectUndo.sh` | Redirect port 80 to the app port |
-| `proxmoxTunelStart.sh` / `Status` / `Stop` | SSH tunnel to the server's MySQL on local port 3308 |
+| `proxmoxInstall.sh` | Prepara el servidor (un sol cop; demana la contrasenya de sudo) |
+| `proxmoxDeploy.sh` | Desplega `main` amb còpia, migracions i comprovació de salut |
+| `proxmoxBackup.sh` | Baixa una còpia de la base de dades i del `.env` a `backups/` |
+| `proxmoxConnect.sh` | Obre una sessió SSH |
+| `proxmoxSendFile.sh` | Copia un fitxer al servidor |
+| `proxmoxSetupRedirect80.sh` / `proxmoxSetupRedirectUndo.sh` | Redirigeix el port 80 al port de l'aplicació |
+| `proxmoxTunelStart.sh` / `Status` / `Stop` | Túnel SSH cap al MySQL del servidor (port local 3308) |
 
-## User roles
+## Seguretat
 
-| Capability | Admin | Teacher (assigned project) | Student (own group) |
-|---|:-:|:-:|:-:|
-| Manage users (roles, approvals, disabling accounts) | ✔ | | |
-| Add a teacher to a project by email (creating the account if needed) | ✔ | ✔ | |
-| Create and manage the project's tags | ✔ | ✔ | |
-| Remove a teacher from a project (a teacher cannot remove themself) | ✔ | ✔ | |
-| Delete an archived project permanently | ✔ | | |
-| Create projects | | ✔ | |
-| Edit, archive and duplicate a project | ✔ | ✔ | |
-| Create groups and add or remove their students (by email) | ✔ | ✔ | |
-| Create, edit, delete and reorder shared tasks; import from Markdown | ✔ | ✔ | |
-| View every group, matrix, blocked tasks, student activity | ✔ | ✔ | |
-| Change any task state, reassign responsibility | ✔ | ✔ | |
-| Move tasks along the board, block and unblock, complete | ✔ | ✔ | ✔ |
-| Comment on tasks | ✔ | ✔ | ✔ |
-| Transfer one's own tasks to a group member | | | ✔ |
-| Add or remove collaborators on a task one is responsible for | ✔ | ✔ | ✔ |
-| Configure the group's GitHub repository URL | ✔ | | ✔ |
+- **Contrasenyes**: són opcionals i es desen només com a resums **scrypt** amb
+  sal, mai en text pla. La longitud mínima és de 8 caràcters i per canviar-la
+  cal l'actual.
+- **Intents fallits**: després de 5 intents fallits per a un compte, aquell
+  compte queda bloquejat 15 minuts per a l'adreça des d'on s'han fet. La resta
+  de persones darrere la mateixa adreça (un centre sencer sovint en comparteix
+  una) poden continuar entrant.
+- **Sessions**: es desen al servidor, amb galetes `HttpOnly` i `SameSite=Lax`.
+  Canviar la contrasenya tanca les altres sessions de la persona.
+- **Treure una contrasenya**: l'administració ho pot fer des d'**Usuaris**
+  (*Treu la contrasenya*), cosa que també tanca les sessions obertes. Una
+  contrasenya continua funcionant encara que la institució tanqui el compte,
+  fins que es treu aquí o es desactiva el compte.
+- **CSRF**: totes les peticions que modifiquen dades necessiten la capçalera
+  `X-CSRF-Token`.
+- **Contingut**: el Markdown es neteja al servidor i una política CSP estricta
+  impedeix executar scripts externs.
+- **Comptes desactivats**: perden l'accés a l'instant, perquè l'usuari es
+  torna a llegir de la base de dades a cada petició.
 
-A teacher who creates (or duplicates) a project is assigned to it
-automatically. Its teachers can add colleagues by email; if the email has no
-account yet, they type the colleague's name and the teacher account is
-created. They can also remove a colleague, but not themselves. An existing
-student account is never turned into a teacher this way. Teacher access
-depends **only** on that assignment (`project_teachers`).
-Tags classify and color tasks; they never grant or restrict permissions.
+Les decisions de disseny s'expliquen a [docs/architecture.md](docs/architecture.md).
 
-The administrator's menu has only *Projectes* and *Usuaris*: administrators
-oversee every project but do not create them, and the blocked-tasks dashboard
-is a teacher screen. Every rule is enforced by the backend.
+## API REST
 
-## Archiving and deleting projects
+Tots els punts d'accés són sota `/api`, retornen JSON i informen dels errors
+com a `{ "error": { "code", "message", "details"? } }`. Les peticions que
+modifiquen dades necessiten la capçalera `X-CSRF-Token` (el testimoni s'obté
+amb `GET /api/session`).
 
-Teachers and administrators **archive** a project when it ends: it becomes
-read-only and stays available, with all its history, under *Projectes
-arxivats*. It can be reactivated.
-
-Administrators see every project, active and archived, and can **delete** an
-archived one from its *Configuració* tab, after a confirmation. Deleting is
-permanent: the project's tasks, tags, groups, progress, comments and history
-are erased (user accounts are kept). An active project cannot be deleted; it
-has to be archived first.
-
-## Tags
-
-Tags replace the former global "professional modules". They belong to one
-project, and a task can have any number of them, or none.
-
-- A project's teachers create tags simply by typing a new name while editing
-  a task; the editor suggests the project's tags and the names used in the
-  teacher's other projects.
-- A new tag gets a color automatically (the same color the name has in
-  another project, if any). Names, colors and deletions are managed in the
-  project's *Configuració* tab.
-- Deleting a tag removes it from the tasks that had it; nothing else changes.
-- The progress matrix can be filtered by tag.
-
-## Passwords
-
-Signing in with the institutional account needs no password. People who
-prefer not to use it can set a password in **El meu perfil** and then sign in
-with their email and that password.
-
-- Passwords are stored only as salted **scrypt** hashes (a slow function
-  designed for passwords), never in plain text. A fast hash such as MD5 would
-  not be safe for this.
-- The minimum length is 8 characters. Changing a password requires the
-  current one.
-- After 5 failed sign-in attempts for one account, that account is locked for
-  the address they came from for 15 minutes. Other people behind the same
-  address (a whole school often shares one) can still sign in; an address
-  that keeps failing with many different accounts is locked as a whole.
-- Setting or changing a password ends the person's other open sessions.
-- An administrator can remove a person's password in **Usuaris** (*Treu la
-  contrasenya*), which also ends their open sessions. Use it for a forgotten
-  password, or when someone must only come in through the institutional
-  account again: a password keeps working even after the institution closes
-  that account, until it is removed here or the account is disabled.
-- A person must sign in once (institutional account) before they can set a
-  password; there is no "forgot my password" email.
-
-## Task states and assignment
-
-States: `pending` (Pendent), `in_progress` (En curs), `blocked` (Bloquejat) and
-`completed` (Finalitzat). Each group has its own state for every shared task.
-
-Student transitions:
-
-```text
-pending ──▶ in_progress ──▶ completed
-               ▲  │  ▲           │
-               │  ▼  └───────────┘  (reopen)
-               │ blocked
-               └── pending (back)
-```
-
-Teachers and administrators can also correct a task to any other state.
-
-- **Priority is the position in the project's task list.** There are no
-  priority levels. Administrators and the project's teachers reorder; all
-  boards follow that order.
-  The *Finalitzat* column is the exception: it shows tasks in the order they
-  were completed, with the completion date on each card.
-- **Automatic assignment**: when a student moves an unassigned task to
-  *En curs* they become its responsible student, atomically with the state
-  change. Teachers and administrators never become responsible this way.
-- A task has **at most one** responsible student, who stays responsible
-  through blocking, completion and reopening.
-- **Collaborators**: the responsible student can add other members of the
-  group who work on the task with them, and remove them. Nobody else can
-  (teachers and administrators can correct the list). A task without a
-  responsible student has no collaborators. When responsibility is handed
-  over, collaborators stay; if the new responsible was a collaborator they
-  leave that list, and a task that is left unassigned loses its collaborators.
-- **Transfers**: the responsible student can hand the task to another member
-  of the group. Teachers and administrators can reassign or unassign.
-- **Completion**: any member of the group can complete a task. The person who
-  completed it is recorded separately from the responsible student, together
-  with the definition version at that moment.
-- **Blocking** requires a reason. Each block is stored as an event with who
-  blocked, who unblocked, when, and for how long. Previous events are kept.
-- Every action is appended to the task's activity history.
-
-## Markdown import
-
-Administrators and the project's teachers can import the initial task list
-from Markdown **only while
-the project has no tasks**. The project's *Tasques* tab offers the import and
-a downloadable template; [examples/tasks-example.md](examples/tasks-example.md)
-shows the format:
-
-```markdown
-## Create GitHub Repository
-
-**Tags:** Programming
-
-Create the group's GitHub repository.
-
----
-
-## Design Database
-
-**Tags:** Databases, Programming
-
-Create the relational database schema.
-
----
-
-## Present the Project
-
-A task without tags.
-```
-
-- Each `##` heading is a task; document order becomes the global order.
-- `**Tags:**` is optional and lists the task's tags (`**Etiquetes:**` and the
-  older `**Modules:**` are accepted too). Tags the project does not have yet
-  are created by the import.
-- Everything else under the task is its Markdown description. The
-  `### Description` heading is optional (the Catalan `**Mòduls:**` and
-  `### Descripció` are accepted too).
-- A preview shows the tasks, their order, tags (marking the new ones), errors
-  and warnings.
-- The import is atomic: with any error, nothing is created.
-
-## Project duplication
-
-From a project's *Configuració* tab an administrator or one of its teachers
-can duplicate it for
-another academic year. The copy receives the name and description (editable),
-the tags, the shared tasks with their tags, and their order. It
-does **not** receive teachers, groups, students, repository URLs, task states,
-responsible students, comments, blocking events or history.
-
-## REST API overview
-
-All endpoints are under `/api`, return JSON, and report errors as
-`{ "error": { "code", "message", "details"? } }`. State-changing requests need
-the `X-CSRF-Token` header (the token comes from `GET /api/session`).
-
-| Area | Endpoints |
+| Àrea | Punts d'accés |
 |---|---|
-| Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/password-login`, `POST /auth/logout`, `GET /api/session` |
-| Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PUT /api/profile/password`, `DELETE /api/users/:id/password`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
-| Tags | `GET/POST /api/projects/:id/tags`, `GET /api/projects/:id/tags/suggestions`, `PUT/DELETE /api/tags/:id` |
-| Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `DELETE /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers`, `DELETE …/teachers/:userId` |
-| Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
-| Shared tasks | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |
-| Import | `GET /api/projects/:id/import/template`, `POST …/import/preview`, `POST …/import` |
-| Group tasks | `GET /api/group-tasks/:id`, `POST …/status`, `POST …/responsible`, `POST …/collaborators`, `DELETE …/collaborators/:userId`, `POST …/comments`, `GET …/history` |
-| Supervision | `GET /api/projects/:id/matrix`, `GET /api/blocked-tasks`, `GET /api/projects/:id/students/:userId/contributions` |
+| Autenticació | `GET /auth/login`, `GET <ruta de retorn>`, `POST /auth/password-login`, `POST /auth/logout`, `GET /api/session` |
+| Usuaris | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `DELETE /api/users/:id/password`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PATCH /api/profile`, `PUT /api/profile/password` |
+| Etiquetes | `GET/POST /api/projects/:id/tags`, `GET /api/projects/:id/tags/suggestions`, `PUT/DELETE /api/tags/:id` |
+| Projectes | `GET/POST /api/projects`, `GET/PUT/DELETE /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers`, `DELETE …/teachers/:userId` |
+| Grups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
+| Tasques compartides | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |
+| Importació | `GET /api/projects/:id/import/template`, `POST …/import/preview`, `POST …/import` |
+| Tasques de grup | `GET /api/group-tasks/:id`, `POST …/status`, `POST …/responsible`, `POST …/collaborators`, `DELETE …/collaborators/:userId`, `POST …/comments`, `GET …/history` |
+| Supervisió | `GET /api/projects/:id/matrix`, `GET /api/blocked-tasks`, `GET /api/projects/:id/students/:userId/contributions` |
 
-## Repository structure
+## Estructura del repositori
 
 ```text
 ├── src/
 │   ├── app.js, server.js
-│   ├── config/         environment loading and validation
-│   ├── auth/           OpenID Connect flow
-│   ├── routes/         route tables
-│   ├── controllers/    HTTP request/response handling
-│   ├── services/       business rules and authorization
+│   ├── config/         càrrega i validació de la configuració
+│   ├── auth/           flux d'OpenID Connect
+│   ├── routes/         taules de rutes
+│   ├── controllers/    peticions i respostes HTTP
+│   ├── services/       regles de negoci i autorització
 │   ├── repositories/   SQL
-│   ├── middleware/     session user, CSRF, errors
-│   ├── validators/     input validation
+│   ├── middleware/     usuari de la sessió, CSRF, errors
+│   ├── validators/     validació de les dades d'entrada
 │   ├── utils/          errors, Markdown, colors
-│   └── db/             pool, migration runner, create-admin
-├── public/             frontend (HTML, CSS, JS modules)
-├── migrations/         SQL migrations
-├── tests/              automated tests
+│   └── db/             connexions, migracions, create-admin
+├── public/             interfície (HTML, CSS, mòduls JS)
+├── migrations/         migracions SQL
+├── tests/              proves automàtiques
+├── assets/             captures de pantalla d'aquest document
 ├── docs/architecture.md
 ├── examples/tasks-example.md
-├── proxmox/            deployment scripts for kanban.ieti.site
-├── docker-compose.yml  local MySQL
+├── proxmox/            scripts de desplegament
+├── docker-compose.yml  MySQL local
 └── .env.example
 ```
