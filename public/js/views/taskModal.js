@@ -99,6 +99,7 @@ export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly
     let transfer = null;
     if (task.can_transfer && !readOnly) {
       const candidates = task.members.filter((m) => !task.responsible || m.id !== task.responsible.id);
+      const canUnassign = task.can_manage && Boolean(task.responsible);
       const select = h('select', { 'aria-label': 'Nova persona responsable' },
         h('option', { value: '' }, 'Tria una persona…'),
         candidates.map((m) => h('option', { value: String(m.id) }, m.name)),
@@ -114,7 +115,10 @@ export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly
           update(updated);
         });
       });
-      transfer = h('div', { class: 'stack' }, select, button);
+      // With nobody to hand the task to, explain it rather than offer an empty list.
+      transfer = candidates.length === 0 && !canUnassign
+        ? h('p', { class: 'muted' }, 'No es pot transferir: el grup només té una persona.')
+        : h('div', { class: 'stack' }, select, button);
     }
 
     // People who work on the task with the responsible student. Only the
@@ -148,10 +152,19 @@ export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly
         add = h('div', { class: 'stack' }, select, button);
       }
 
+      // Say why there is nothing to choose, instead of just showing no control.
+      let note = null;
+      if (canEdit && candidates.length === 0) {
+        note = task.members.length <= 1
+          ? "No es poden afegir col·laboradors: el grup només té una persona."
+          : 'Tots els membres del grup ja hi treballen.';
+      }
+
       return h('section', {},
         h('h3', {}, 'Col·laboradors'),
         rows.length ? rows : h('p', { class: 'muted' }, 'Ningú més hi treballa.'),
-        add);
+        add,
+        note ? h('p', { class: 'muted' }, note) : null);
     }
 
     return h('aside', { class: 'detail-side' },
