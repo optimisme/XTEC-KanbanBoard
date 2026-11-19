@@ -43,6 +43,7 @@ router.post('/projects/:projectId/archive', projects.archive);
 router.post('/projects/:projectId/unarchive', projects.unarchive);
 router.post('/projects/:projectId/duplicate', projects.duplicate);
 router.put('/projects/:projectId/teachers', projects.setTeachers);
+router.post('/projects/:projectId/teachers', projects.addTeacher);
 
 // Groups
 router.post('/projects/:projectId/groups', projects.createGroup);

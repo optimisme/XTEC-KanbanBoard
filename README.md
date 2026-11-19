@@ -329,7 +329,8 @@ Proxmox container.
 | Capability | Admin | Teacher (assigned project) | Student (own group) |
 |---|:-:|:-:|:-:|
 | Manage users and professional modules | ✔ | | |
-| Assign teachers to a project | ✔ | | |
+| Add a teacher to a project (by email, existing teacher accounts) | ✔ | ✔ | |
+| Remove teachers from a project | ✔ | | |
 | Create projects | ✔ | ✔ | |
 | Edit, archive and duplicate a project | ✔ | ✔ | |
 | Create groups and add or remove their students (by email) | ✔ | ✔ | |
@@ -342,7 +343,8 @@ Proxmox container.
 | Configure the group's GitHub repository URL | ✔ | | ✔ |
 
 A teacher who creates (or duplicates) a project is assigned to it
-automatically; an administrator can assign more teachers. Teacher access
+automatically. Its teachers can add colleagues by email, as long as they
+already have a teacher account; only administrators remove teachers. Teacher access
 depends **only** on that assignment (`project_teachers`).
 Professional modules categorize and color tasks; they never grant or restrict
 permissions. Every rule is enforced by the backend.
@@ -431,7 +433,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 | Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/admin-login`, `POST /auth/logout`, `GET /api/session` |
 | Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
 | Modules | `GET/POST /api/modules`, `PUT/DELETE /api/modules/:id` |
-| Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers` |
+| Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers` |
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
 | Shared tasks | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |
 | Import | `GET /api/projects/:id/import/template`, `POST …/import/preview`, `POST …/import` |

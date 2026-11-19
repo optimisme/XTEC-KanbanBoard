@@ -118,7 +118,28 @@ export async function setStatus(user, projectId, status) {
   return get(user, projectId);
 }
 
-// Which teachers belong to a project is decided by administrators only.
+// A project's teachers (and administrators) can bring in another teacher by
+// institutional email. Only existing, active teacher accounts can be added:
+// this never creates an account or turns anyone into a teacher.
+export async function addTeacher(user, projectId, body) {
+  const email = v.email(body.email);
+  const { project } = await managerAccess(db, user, projectId);
+  assertWritable(project);
+  const teacher = await userRepo.findByEmail(db, email);
+  if (!teacher) {
+    throw notFound(`No hi ha cap compte amb el correu ${email}. Demana a administració que l'afegeixi com a professorat.`);
+  }
+  if (teacher.role !== 'teacher') throw conflict(`${email} no és un compte de professorat.`);
+  if (teacher.status !== 'active') throw conflict(`El compte ${email} no està actiu.`);
+  if (await projectRepo.isTeacher(db, projectId, teacher.id)) {
+    throw conflict(`${teacher.name} ja és professor/a d'aquest projecte.`);
+  }
+  await projectRepo.addTeacher(db, projectId, teacher.id);
+  return get(user, projectId);
+}
+
+// Replacing the whole list of teachers (which can also remove them) is left
+// to administrators.
 export async function setTeachers(user, projectId, body) {
   requireAdmin(user);
   const teacherIds = v.idArray(body.teacher_ids, 'professorat');

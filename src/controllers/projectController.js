@@ -39,6 +39,10 @@ export async function duplicate(req, res) {
   res.status(201).json(await projectService.duplicate(req.user, projectId(req), req.body));
 }
 
+export async function addTeacher(req, res) {
+  res.status(201).json(await projectService.addTeacher(req.user, projectId(req), req.body));
+}
+
 export async function setTeachers(req, res) {
   res.json(await projectService.setTeachers(req.user, projectId(req), req.body));
 }

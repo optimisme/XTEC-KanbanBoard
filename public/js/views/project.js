@@ -324,6 +324,26 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       reload();
     }));
 
+    // Teachers add a colleague by email; the colleague must already have a teacher account.
+    function addTeacherForm() {
+      const email = h('input', { type: 'email', required: true, placeholder: 'professor@xtec.cat', autocomplete: 'off', 'aria-label': 'Correu del professor o professora' });
+      const add = h('button', { class: 'btn', type: 'submit' }, 'Afegeix');
+      return h('form', {
+        class: 'field', style: { 'margin-top': '14px' },
+        onSubmit: (event) => {
+          event.preventDefault();
+          run(add, async () => {
+            await api.post(`/api/projects/${project.id}/teachers`, { email: email.value });
+            toast('Professorat afegit al projecte.');
+            reload();
+          });
+        },
+      },
+        h('label', {}, 'Afegeix professorat pel seu correu institucional'),
+        h('div', { class: 'inline-form' }, email, add),
+        h('div', { class: 'hint' }, 'Ha de tenir ja un compte de professorat a l\'aplicació.'));
+    }
+
     const archive = h('button', { class: 'btn', type: 'button' }, writable ? 'Arxiva el projecte' : 'Reactiva el projecte');
     archive.addEventListener('click', async () => {
       const ok = await confirmDialog(writable
@@ -375,8 +395,10 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         h('div', { class: 'card-actions' }, saveTeachers))
         : h('div', { class: 'card' },
             h('h2', {}, 'Professorat assignat'),
-            h('p', { class: 'muted' }, project.teachers.map((t) => t.name).join(', ') || 'Cap'),
-            h('p', { class: 'muted' }, "Per afegir o treure professorat d'aquest projecte, contacta amb administració.")),
+            h('ul', { class: 'member-list' }, project.teachers.map((t) =>
+              h('li', {}, h('div', {}, h('strong', {}, t.name), h('div', { class: 'muted' }, t.email))))),
+            writable ? addTeacherForm() : null,
+            h('p', { class: 'muted', style: { 'margin-top': '10px' } }, "Per treure professorat d'aquest projecte, contacta amb administració.")),
       h('div', { class: 'card' },
         h('h2', {}, 'Cicle de vida'),
         h('p', { class: 'muted' }, 'Duplica el projecte per a un curs nou o arxiva\'l quan acabi.'),

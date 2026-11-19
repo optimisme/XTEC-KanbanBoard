@@ -486,3 +486,33 @@ test('teachers add students to groups by email, creating accounts when needed', 
   assert.equal((await otherTeacher.put(`/api/groups/${group.id}/students`, { students: [{ email: 's2@xtec.cat' }] })).status, 403);
   assert.equal((await student.put(`/api/groups/${group.id}/students`, { students: [{ email: 's2@xtec.cat' }] })).status, 403);
 });
+
+test('teachers add other teachers to their project by email', async () => {
+  const projectId = s.teacherProjectId;
+  const add = (client, email) => client.post(`/api/projects/${projectId}/teachers`, { email });
+
+  // Outsiders and students cannot add anyone.
+  assert.equal((await add(otherTeacher, 'other@xtec.cat')).status, 403);
+  assert.equal((await add(student1, 'other@xtec.cat')).status, 403);
+
+  // Only existing, active teacher accounts: no account creation, no role change.
+  assert.equal((await add(teacher, 'nobody.yet@xtec.cat')).status, 404);
+  assert.equal((await db.query("SELECT COUNT(*) AS n FROM users WHERE email = 'nobody.yet@xtec.cat'"))[0].n, 0);
+  assert.equal((await add(teacher, 's2@xtec.cat')).status, 409);
+  assert.equal((await db.query("SELECT role FROM users WHERE email = 's2@xtec.cat'"))[0].role, 'student');
+  assert.equal((await add(teacher, 'not-an-email')).status, 400);
+
+  const added = await add(teacher, 'Other@xtec.cat');
+  assert.equal(added.status, 201);
+  assert.deepEqual(added.body.teachers.map((t) => t.name).sort(), ['Teacher A', 'Teacher B']);
+  assert.equal((await add(teacher, 'other@xtec.cat')).status, 409); // already there
+
+  // The added teacher now manages the project like any other teacher of it.
+  assert.equal((await otherTeacher.get(`/api/projects/${projectId}`)).body.can_manage, true);
+  assert.equal((await otherTeacher.post(`/api/projects/${projectId}/tasks`, taskBody({ title: 'By colleague' }))).status, 201);
+
+  // Removing teachers (replacing the list) is still for administrators.
+  assert.equal((await otherTeacher.put(`/api/projects/${projectId}/teachers`, { teacher_ids: [s.users.otherTeacher.id] })).status, 403);
+  assert.equal((await s.admin.put(`/api/projects/${projectId}/teachers`, { teacher_ids: [s.users.teacher.id] })).status, 200);
+  assert.equal((await otherTeacher.get(`/api/projects/${projectId}`)).status, 403);
+});
