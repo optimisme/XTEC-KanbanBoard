@@ -2,7 +2,7 @@
 // "move to" control on every card. Cards always follow the global task order.
 import { api } from '../api.js';
 import {
-  append, avatar, clear, formatDateTime, h, icon, toggleSwitch, tagChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
+  append, avatar, clear, formatDateTime, h, icon, modal, toggleSwitch, tagChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
 } from '../ui.js';
 import { changeTaskStatus, openTaskModal } from './taskModal.js';
 
@@ -159,18 +159,31 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
     append(clear(boardEl), STATUSES.map(column));
   }
 
+  // The project description, for students (staff read it in the project page).
+  function showDescription() {
+    modal({
+      title: board.project.name,
+      wide: true,
+      body: board.project.description_html
+        ? h('div', { class: 'markdown', html: board.project.description_html })
+        : h('p', { class: 'muted' }, 'Aquest projecte no té descripció.'),
+    });
+  }
+
   append(view, 
     h('div', { class: 'page-header' },
       h('div', { class: 'titles' },
         h('div', { class: 'breadcrumb' },
           h('a', { href: '#/' }, user.role === 'student' ? 'Els meus projectes' : 'Projectes'), ' / ',
-          h('a', { href: `#/projects/${board.project.id}` }, board.project.name)),
+          // Students have no project page: the board is their whole view.
+          board.can_manage ? h('a', { href: `#/projects/${board.project.id}` }, board.project.name) : board.project.name),
         h('h1', {}, `Grup ${board.group.group_number}`)),
-      board.project.status === 'archived'
-        ? h('span', { class: 'tag' }, 'Projecte arxivat · només lectura')
-        : board.can_manage
+      h('div', { class: 'actions' },
+        board.project.status === 'archived' ? h('span', { class: 'tag' }, 'Projecte arxivat · només lectura') : null,
+        board.can_manage && board.project.status === 'active'
           ? toggleSwitch("Permet l'edició", editing, (on) => { editing = on; draw(); })
-          : null),
+          : null,
+        board.can_manage ? null : h('button', { class: 'btn', type: 'button', onClick: showDescription }, 'Descripció'))),
     infoEl,
     board.tasks.length === 0 ? h('div', { class: 'notice' }, 'Aquest projecte encara no té tasques.') : null,
     boardEl

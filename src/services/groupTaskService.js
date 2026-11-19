@@ -68,7 +68,13 @@ export async function board(user, groupId) {
   const tags = await tagRepo.mapForTasks(db, rows.map((r) => r.task_id));
   const collaborators = await groupTaskRepo.collaboratorsFor(db, rows.map((r) => r.id));
   return {
-    project: { id: access.project.id, name: access.project.name, status: access.project.status },
+    project: {
+      id: access.project.id,
+      name: access.project.name,
+      status: access.project.status,
+      // Students read the project description from their board.
+      description_html: renderMarkdown(access.project.description),
+    },
     group: access.group,
     access: access.level,
     can_manage: access.canManage,

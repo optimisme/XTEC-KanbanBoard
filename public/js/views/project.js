@@ -18,10 +18,18 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
   const isAdmin = project.access === 'admin';
   const writable = project.status === 'active';
 
-  const tabs = [['description', 'Descripció'], ['groups', 'Grups'], ['tasks', 'Tasques']];
-  if (project.can_manage) tabs.push(['matrix', 'Matriu de progrés'], ['students', 'Alumnat']);
-  if (project.can_manage) tabs.push(['settings', 'Configuració']);
-  const tab = tabs.some(([key]) => key === tabParam) ? tabParam : 'description';
+  // Students work only on their group's board; the project page is for staff.
+  if (!project.can_manage) {
+    window.location.replace(`#/groups/${project.my_group_id}`);
+    return;
+  }
+
+  // The progress matrix comes first and is what opens by default.
+  const tabs = [
+    ['matrix', 'Matriu de progrés'], ['description', 'Descripció'], ['groups', 'Grups'],
+    ['tasks', 'Tasques'], ['students', 'Alumnat'], ['settings', 'Configuració'],
+  ];
+  const tab = tabs.some(([key]) => key === tabParam) ? tabParam : 'matrix';
   const content = h('div', {});
   const reload = () => ctx.rerender();
   // "@xtec.cat, @iesesteveterradas.cat": the accounts the sign-in accepts.

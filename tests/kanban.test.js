@@ -53,6 +53,12 @@ test('a teacher changing a state never becomes the responsible student', async (
   await teacher.post(`/api/group-tasks/${gtC}/responsible`, { user_id: null });
 });
 
+test('the board carries the project description for students', async () => {
+  const board = (await student1.get(`/api/groups/${s.group0.id}/board`)).body;
+  assert.match(board.project.description_html, /<p>A test project<\/p>/);
+  assert.equal(board.can_manage, false);
+});
+
 test('transition policy is enforced on the backend', async () => {
   // Students cannot jump from pending to completed or blocked.
   assert.equal((await setStatus(student1, gtB, 'completed')).body.error.code, 'invalid_transition');
