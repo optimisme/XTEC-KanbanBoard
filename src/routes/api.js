@@ -25,6 +25,9 @@ router.patch('/users/:id', adminOnly, admin.updateUser);
 router.post('/users/:id/approve', adminOnly, admin.approveUser);
 router.post('/users/:id/reject', adminOnly, admin.rejectUser);
 
+// Used by teachers and administrators when adding students to a group by email.
+router.post('/students/lookup', staffOnly, admin.lookupStudent);
+
 // Professional modules
 router.get('/modules', staffOnly, admin.listModules);
 router.post('/modules', adminOnly, admin.createModule);

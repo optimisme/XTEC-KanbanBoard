@@ -6,7 +6,8 @@ import { conflict, forbidden, notFound } from '../utils/errors.js';
 // Central authorization rules. Every service resolves access through these
 // functions, so the rules live in exactly one place:
 //   admin   -> every project
-//   teacher -> projects listed in project_teachers (never by module)
+//   teacher -> projects listed in project_teachers (never by module); a
+//              teacher manages those projects fully and can create new ones
 //   student -> only their own group inside a project
 
 export async function projectAccess(db, user, projectId) {
@@ -50,6 +51,11 @@ export async function managerAccess(db, user, projectId) {
   const access = await projectAccess(db, user, projectId);
   if (!access.canManage) throw forbidden();
   return access;
+}
+
+// Administrators and teachers (for actions not tied to an existing project).
+export function requireStaff(user) {
+  if (user.role !== 'admin' && user.role !== 'teacher') throw forbidden();
 }
 
 export function requireAdmin(user) {

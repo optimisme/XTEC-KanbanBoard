@@ -75,6 +75,10 @@ export async function isTeacher(db, projectId, userId) {
   return rows.length > 0;
 }
 
+export async function addTeacher(db, projectId, userId) {
+  await db.query('INSERT IGNORE INTO project_teachers (project_id, user_id) VALUES (?, ?)', [projectId, userId]);
+}
+
 export async function setTeachers(db, projectId, userIds) {
   await db.query('DELETE FROM project_teachers WHERE project_id = ?', [projectId]);
   if (userIds.length === 0) return;

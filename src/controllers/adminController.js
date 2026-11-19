@@ -12,6 +12,10 @@ export async function createUser(req, res) {
   res.status(201).json(await userService.create(req.body));
 }
 
+export async function lookupStudent(req, res) {
+  res.json(await userService.lookupStudent(req.body));
+}
+
 export async function updateUser(req, res) {
   res.json(await userService.update(req.user, v.id(req.params.id), req.body));
 }

@@ -4,8 +4,8 @@ A Kanban management application for vocational training institutes. Teachers
 define the tasks of a project once; every project group gets the same tasks,
 in the same order, and tracks its own progress on an independent board.
 
-- **Administrators** manage users, professional modules, projects, groups and the global task order.
-- **Teachers** supervise every group of the projects they are assigned to.
+- **Administrators** manage users and professional modules, and can do everything in every project.
+- **Teachers** create projects and fully manage the ones they created or are assigned to: tasks, task order, groups and students.
 - **Students** work on their own group's board.
 
 The user interface is entirely in **Catalan**. Code, database and documentation are in English.
@@ -201,6 +201,14 @@ two ways to get the first one:
 
 Further administrators are appointed from **Usuaris** inside the application.
 
+### Adding students to a group
+
+Teachers and administrators fill a group by typing each student's
+institutional email. If the email already has a student account, the student
+is added. If it does not, the form asks for the student's name and creates
+the account; the student then signs in with that email without approval. A
+student whose account was still pending becomes active when added to a group.
+
 ### Adding people in advance
 
 An administrator can add a person from **Usuaris → Afegeix un usuari** with
@@ -320,9 +328,12 @@ Proxmox container.
 
 | Capability | Admin | Teacher (assigned project) | Student (own group) |
 |---|:-:|:-:|:-:|
-| Manage users, modules, projects, groups, teachers | ✔ | | |
-| Reorder shared tasks, import from Markdown, duplicate, archive | ✔ | | |
-| Create and edit shared task definitions | ✔ | ✔ | |
+| Manage users and professional modules | ✔ | | |
+| Assign teachers to a project | ✔ | | |
+| Create projects | ✔ | ✔ | |
+| Edit, archive and duplicate a project | ✔ | ✔ | |
+| Create groups and add or remove their students (by email) | ✔ | ✔ | |
+| Create, edit, delete and reorder shared tasks; import from Markdown | ✔ | ✔ | |
 | View every group, matrix, blocked tasks, student activity | ✔ | ✔ | |
 | Change any task state, reassign responsibility | ✔ | ✔ | |
 | Move tasks along the board, block and unblock, complete | ✔ | ✔ | ✔ |
@@ -330,7 +341,9 @@ Proxmox container.
 | Transfer one's own tasks to a group member | | | ✔ |
 | Configure the group's GitHub repository URL | ✔ | | ✔ |
 
-Teacher access depends **only** on project assignment (`project_teachers`).
+A teacher who creates (or duplicates) a project is assigned to it
+automatically; an administrator can assign more teachers. Teacher access
+depends **only** on that assignment (`project_teachers`).
 Professional modules categorize and color tasks; they never grant or restrict
 permissions. Every rule is enforced by the backend.
 
@@ -352,7 +365,8 @@ pending ──▶ in_progress ──▶ completed
 Teachers and administrators can also correct a task to any other state.
 
 - **Priority is the position in the project's task list.** There are no
-  priority levels. Only administrators reorder; all boards follow that order.
+  priority levels. Administrators and the project's teachers reorder; all
+  boards follow that order.
   The *Finalitzat* column is the exception: it shows tasks in the order they
   were completed, with the completion date on each card.
 - **Automatic assignment**: when a student moves an unassigned task to
@@ -371,7 +385,8 @@ Teachers and administrators can also correct a task to any other state.
 
 ## Markdown import
 
-Administrators can import the initial task list from Markdown **only while
+Administrators and the project's teachers can import the initial task list
+from Markdown **only while
 the project has no tasks**. The project's *Tasques* tab offers the import and
 a downloadable template; [examples/tasks-example.md](examples/tasks-example.md)
 shows the format:
@@ -398,7 +413,8 @@ Create the group's GitHub repository.
 
 ## Project duplication
 
-From a project's *Configuració* tab an administrator can duplicate it for
+From a project's *Configuració* tab an administrator or one of its teachers
+can duplicate it for
 another academic year. The copy receives the name and description (editable),
 the module associations, the shared tasks, their modules and their order. It
 does **not** receive teachers, groups, students, repository URLs, task states,
@@ -413,7 +429,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 | Area | Endpoints |
 |---|---|
 | Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/admin-login`, `POST /auth/logout`, `GET /api/session` |
-| Users | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
+| Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
 | Modules | `GET/POST /api/modules`, `PUT/DELETE /api/modules/:id` |
 | Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers` |
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |

@@ -4,7 +4,7 @@ import * as moduleRepo from '../repositories/moduleRepository.js';
 import * as taskRepo from '../repositories/taskRepository.js';
 import { conflict, HttpError, notFound } from '../utils/errors.js';
 import * as v from '../validators/index.js';
-import { assertWritable, requireAdmin } from './accessService.js';
+import { assertWritable, managerAccess } from './accessService.js';
 import { insertTask, list as listTasks } from './taskService.js';
 
 const MAX_MARKDOWN_LENGTH = 500000;
@@ -110,7 +110,7 @@ async function loadImportableProject(executor, projectId, { lock }) {
 }
 
 export async function preview(user, projectId, body) {
-  requireAdmin(user);
+  await managerAccess(db, user, projectId);
   const markdown = readMarkdown(body);
   await loadImportableProject(db, projectId, { lock: false });
   return buildPreview(parseTasksMarkdown(markdown), await moduleRepo.listForProject(db, projectId));
@@ -118,7 +118,7 @@ export async function preview(user, projectId, body) {
 
 // Atomic: either every task (and its group instances) is created, or none.
 export async function importTasks(user, projectId, body) {
-  requireAdmin(user);
+  await managerAccess(db, user, projectId);
   const markdown = readMarkdown(body);
 
   await db.tx(async (t) => {
@@ -145,7 +145,7 @@ export async function importTasks(user, projectId, body) {
 
 // A ready-to-edit example that uses the project's own module names.
 export async function template(user, projectId) {
-  requireAdmin(user);
+  await managerAccess(db, user, projectId);
   const project = await projectRepo.findById(db, projectId);
   if (!project) throw notFound("No s'ha trobat el projecte.");
   const names = (await moduleRepo.listForProject(db, projectId)).map((m) => m.name);

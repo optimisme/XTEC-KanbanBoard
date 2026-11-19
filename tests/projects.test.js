@@ -121,8 +121,11 @@ test('groups: numbering, membership rules and validation', async () => {
   // A group needs at least one student.
   assert.equal((await s.admin.post(`/api/projects/${s.project.id}/groups`, { student_ids: [] })).status, 400);
   assert.equal((await s.admin.put(`/api/groups/${s.group2.id}/students`, { student_ids: [] })).status, 400);
-  // Only admins manage groups.
-  assert.equal((await teacher.post(`/api/projects/${s.project.id}/groups`, { student_ids: [s.users.s4.id] })).status, 403);
+  // Groups are managed by admins and the project's teachers, nobody else.
+  assert.equal((await otherTeacher.post(`/api/projects/${s.project.id}/groups`, { student_ids: [s.users.s4.id] })).status, 403);
+  assert.equal((await student1.post(`/api/projects/${s.project.id}/groups`, { student_ids: [s.users.s4.id] })).status, 403);
+  assert.equal((await otherTeacher.put(`/api/groups/${s.group2.id}/students`, { student_ids: [s.users.s4.id] })).status, 403);
+  assert.equal((await otherTeacher.del(`/api/groups/${s.group2.id}`)).status, 403);
   // The database itself also enforces one group per project and student.
   await assert.rejects(
     db.query('INSERT INTO group_students (group_id, project_id, user_id) VALUES (?, ?, ?)', [
@@ -157,12 +160,14 @@ test('10. modifying a shared task does not reset group progress', async () => {
   assert.equal((await groupTaskOf(student3, s.group1.id, s.tasks[0].id)).title, 'Task A (v2)');
 });
 
-test('11 & 12. task order is global, and only administrators can reorder', async () => {
+test('11 & 12. task order is global, and only project managers can reorder', async () => {
   const ids = s.tasks.map((t) => t.id);
   const reversed = [...ids].reverse();
 
-  assert.equal((await teacher.put(`/api/projects/${s.project.id}/tasks/order`, { task_ids: reversed })).status, 403);
+  // Administrators and the project's own teachers reorder; nobody else.
+  assert.equal((await otherTeacher.put(`/api/projects/${s.project.id}/tasks/order`, { task_ids: reversed })).status, 403);
   assert.equal((await student1.put(`/api/projects/${s.project.id}/tasks/order`, { task_ids: reversed })).status, 403);
+  assert.equal((await teacher.put(`/api/projects/${s.project.id}/tasks/order`, { task_ids: ids })).status, 200);
   // The order must contain exactly the project's tasks.
   assert.equal((await s.admin.put(`/api/projects/${s.project.id}/tasks/order`, { task_ids: ids.slice(1) })).status, 400);
 
@@ -275,9 +280,10 @@ Create the relational database schema.
   await s.admin.post(`/api/projects/${empty.id}/groups`, { student_ids: [s.users.s1.id] });
   await s.admin.post(`/api/projects/${empty.id}/groups`, { student_ids: [s.users.s2.id] });
 
-  // Only administrators import.
-  await s.admin.put(`/api/projects/${empty.id}/teachers`, { teacher_ids: [s.users.teacher.id] });
-  assert.equal((await teacher.post(`/api/projects/${empty.id}/import`, { markdown })).status, 403);
+  // Only the project's managers import.
+  assert.equal((await otherTeacher.post(`/api/projects/${empty.id}/import`, { markdown })).status, 403);
+  assert.equal((await teacher.post(`/api/projects/${empty.id}/import/preview`, { markdown })).status, 403);
+  assert.equal((await student1.post(`/api/projects/${empty.id}/import`, { markdown })).status, 403);
 
   // 23. One bad task (unknown module) means nothing is created.
   const invalid = markdown.replace('**Modules:** Databases, Programming', '**Modules:** Databases, Astronomy');
@@ -346,13 +352,20 @@ test('25. project duplication excludes groups, memberships, progress and history
   assert.deepEqual({ ...counts[0] }, { group_tasks: 0, project_groups: 0, students: 0 });
   // The teacher of the original is not carried over.
   assert.equal((await teacher.get(`/api/projects/${copy.id}`)).status, 403);
-  // Only admins duplicate.
-  assert.equal((await teacher.post(`/api/projects/${s.project.id}/duplicate`, {})).status, 403);
+  // Unassigned teachers and students cannot duplicate.
+  assert.equal((await otherTeacher.post(`/api/projects/${s.project.id}/duplicate`, {})).status, 403);
+  assert.equal((await student1.post(`/api/projects/${s.project.id}/duplicate`, {})).status, 403);
+  // A teacher who duplicates their project becomes the teacher of the copy.
+  const mine = await teacher.post(`/api/projects/${s.project.id}/duplicate`, { name: 'Teacher copy', academic_year: '2027-2028' });
+  assert.equal(mine.status, 201);
+  assert.deepEqual(mine.body.teachers.map((t) => t.id), [s.users.teacher.id]);
+  assert.deepEqual(mine.body.groups, []);
 });
 
 test('26. archived projects cannot be modified through normal editing endpoints', async () => {
   const gt = await groupTaskOf(student1, s.group0.id, s.tasks[1].id);
-  assert.equal((await teacher.post(`/api/projects/${s.project.id}/archive`)).status, 403);
+  assert.equal((await otherTeacher.post(`/api/projects/${s.project.id}/archive`)).status, 403);
+  assert.equal((await student1.post(`/api/projects/${s.project.id}/archive`)).status, 403);
   assert.equal((await s.admin.post(`/api/projects/${s.project.id}/archive`)).status, 200);
 
   const attempts = [
@@ -382,4 +395,94 @@ test('26. archived projects cannot be modified through normal editing endpoints'
 
   assert.equal((await s.admin.post(`/api/projects/${s.project.id}/unarchive`)).status, 200);
   assert.equal((await student1.post(`/api/group-tasks/${gt.id}/comments`, { content: 'back' })).status, 201);
+});
+
+test('teachers create projects and manage them; teacher assignment stays with admins', async () => {
+  const created = await teacher.post('/api/projects', {
+    name: 'Teacher project', academic_year: '2026-2027', module_ids: [s.modules.programming.id],
+  });
+  assert.equal(created.status, 201);
+  const projectId = created.body.id;
+  assert.deepEqual(created.body.teachers.map((t) => t.id), [s.users.teacher.id]);
+  assert.equal(created.body.can_manage, true);
+  assert.ok((await teacher.get('/api/projects')).body.some((p) => p.id === projectId));
+
+  // Students cannot create projects; other teachers cannot see or manage this one.
+  assert.equal((await student1.post('/api/projects', { name: 'X', academic_year: '2026-2027' })).status, 403);
+  assert.equal((await otherTeacher.get(`/api/projects/${projectId}`)).status, 403);
+  assert.equal((await otherTeacher.put(`/api/projects/${projectId}`, { name: 'Y', academic_year: '2026-2027' })).status, 403);
+
+  // The creator edits it, adds tasks, reorders, deletes and archives.
+  assert.equal((await teacher.put(`/api/projects/${projectId}`, { name: 'Teacher project 2', academic_year: '2026-2027', module_ids: [s.modules.programming.id] })).body.name, 'Teacher project 2');
+  const t1 = (await teacher.post(`/api/projects/${projectId}/tasks`, taskBody({ title: 'One' }))).body;
+  const t2 = (await teacher.post(`/api/projects/${projectId}/tasks`, taskBody({ title: 'Two' }))).body;
+  const order = await teacher.put(`/api/projects/${projectId}/tasks/order`, { task_ids: [t2.id, t1.id] });
+  assert.deepEqual(order.body.map((t) => t.title), ['Two', 'One']);
+  assert.equal((await teacher.del(`/api/tasks/${t1.id}`)).status, 204);
+  assert.equal((await teacher.post(`/api/projects/${projectId}/archive`)).status, 200);
+  assert.equal((await teacher.post(`/api/projects/${projectId}/unarchive`)).status, 200);
+
+  // Assigning teachers and managing users or modules remain administrator tasks.
+  assert.equal((await teacher.put(`/api/projects/${projectId}/teachers`, { teacher_ids: [s.users.otherTeacher.id] })).status, 403);
+  assert.equal((await teacher.get('/api/users')).status, 403);
+  assert.equal((await teacher.post('/api/modules', { name: 'Mine', color: '#000000' })).status, 403);
+  s.teacherProjectId = projectId;
+});
+
+test('teachers add students to groups by email, creating accounts when needed', async () => {
+  const projectId = s.teacherProjectId;
+  const lookup = (client, email) => client.post('/api/students/lookup', { email });
+
+  // Lookup: known student, unknown email, non-student, other domain, students not allowed.
+  assert.deepEqual((await lookup(teacher, 'S1@xtec.cat')).body, { email: 's1@xtec.cat', found: true, id: s.users.s1.id, name: 'Student 1', problem: null });
+  assert.deepEqual((await lookup(teacher, 'brand.new@xtec.cat')).body, { email: 'brand.new@xtec.cat', found: false });
+  assert.match((await lookup(teacher, 'other@xtec.cat')).body.problem, /alumnat/);
+  assert.equal((await lookup(teacher, 'someone@gmail.com')).status, 400);
+  assert.equal((await lookup(student1, 's2@xtec.cat')).status, 403);
+
+  // An unknown email needs a name; nothing is created without it.
+  const missingName = await teacher.post(`/api/projects/${projectId}/groups`, { students: [{ email: 'brand.new@xtec.cat' }] });
+  assert.equal(missingName.status, 400);
+  assert.equal((await db.query("SELECT COUNT(*) AS n FROM users WHERE email = 'brand.new@xtec.cat'"))[0].n, 0);
+
+  // Existing student + new student in one request.
+  const created = await teacher.post(`/api/projects/${projectId}/groups`, {
+    students: [{ email: 's1@xtec.cat' }, { email: 'Brand.New@xtec.cat', name: 'Brand New' }],
+  });
+  assert.equal(created.status, 201);
+  const group = created.body.groups[0];
+  assert.deepEqual(group.students.map((m) => m.name).sort(), ['Brand New', 'Student 1']);
+  const [newUser] = await db.query("SELECT id, role, status, oidc_subject FROM users WHERE email = 'brand.new@xtec.cat'");
+  assert.deepEqual({ role: newUser.role, status: newUser.status, subject: newUser.oidc_subject }, { role: 'student', status: 'active', subject: null });
+  // The new group received the project's task.
+  assert.equal((await teacher.get(`/api/groups/${group.id}/board`)).body.tasks.length, 1);
+
+  // The new student signs in (verified email) and lands on their group, with no approval.
+  const student = await login('brand.new@xtec.cat');
+  assert.equal(student.loginResponse.body.user.status, 'active');
+  assert.deepEqual((await student.get('/api/projects')).body.map((p) => p.my_group_id), [group.id]);
+
+  // Rules: teachers, disabled accounts, other domains and repeated membership are refused; a failed request creates no account.
+  const bad = async (students) => (await teacher.post(`/api/projects/${projectId}/groups`, { students })).status;
+  assert.equal(await bad([{ email: 'other@xtec.cat' }]), 409);
+  assert.equal(await bad([{ email: 'x@gmail.com', name: 'X' }]), 400);
+  assert.equal(await bad([{ email: 's1@xtec.cat' }]), 409); // already in this project's group
+  assert.equal(await bad([{ email: 'ghost@xtec.cat', name: 'Ghost' }, { email: 'other@xtec.cat' }]), 409);
+  assert.equal((await db.query("SELECT COUNT(*) AS n FROM users WHERE email = 'ghost@xtec.cat'"))[0].n, 0);
+  assert.equal(await bad([]), 400);
+
+  // A pending account added to a group becomes an active student.
+  await login('waiting@xtec.cat', 'Waiting Student');
+  const edited = await teacher.put(`/api/groups/${group.id}/students`, {
+    students: [{ email: 'brand.new@xtec.cat' }, { email: 'waiting@xtec.cat' }],
+  });
+  assert.equal(edited.status, 200);
+  assert.deepEqual(edited.body.groups[0].students.map((m) => m.name).sort(), ['Brand New', 'Waiting Student']);
+  assert.equal((await db.query("SELECT status FROM users WHERE email = 'waiting@xtec.cat'"))[0].status, 'active');
+  // Student 1 was left out of the list, so they lost access to the group.
+  assert.equal((await student1.get(`/api/groups/${group.id}/board`)).status, 403);
+
+  // Outsiders still cannot touch the group.
+  assert.equal((await otherTeacher.put(`/api/groups/${group.id}/students`, { students: [{ email: 's2@xtec.cat' }] })).status, 403);
+  assert.equal((await student.put(`/api/groups/${group.id}/students`, { students: [{ email: 's2@xtec.cat' }] })).status, 403);
 });

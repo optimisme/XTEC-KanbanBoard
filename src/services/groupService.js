@@ -5,8 +5,52 @@ import * as groupTaskRepo from '../repositories/groupTaskRepository.js';
 import * as userRepo from '../repositories/userRepository.js';
 import { badRequest, conflict, forbidden, notFound } from '../utils/errors.js';
 import * as v from '../validators/index.js';
-import { assertWritable, groupAccess, requireAdmin } from './accessService.js';
+import { assertWritable, groupAccess, managerAccess } from './accessService.js';
 import * as projectService from './projectService.js';
+import { assertInstitutionalEmail } from './userService.js';
+
+const MAX_STUDENTS_PER_REQUEST = 60;
+
+// Turns the request into a list of student ids. Students can be given by id
+// (`student_ids`) or by email (`students: [{ email, name? }]`). An email that
+// is not registered yet creates the student account, which needs a name; the
+// student then signs in with that institutional email without approval.
+async function resolveStudents(t, body) {
+  const ids = body.student_ids === undefined ? [] : v.idArray(body.student_ids, 'alumnat');
+  const entries = body.students === undefined ? [] : body.students;
+  if (!Array.isArray(entries) || entries.length > MAX_STUDENTS_PER_REQUEST) {
+    throw badRequest("La llista d'alumnat no és vàlida.");
+  }
+
+  for (const entry of entries) {
+    const email = v.email(entry && entry.email);
+    assertInstitutionalEmail(email);
+    const existing = await userRepo.findByEmail(t, email);
+
+    if (!existing) {
+      if (!entry.name || !String(entry.name).trim()) {
+        throw badRequest(`${email} encara no té compte: cal indicar-ne el nom per crear-lo.`);
+      }
+      const name = v.text(entry.name, 'nom', { max: 200 });
+      ids.push(await userRepo.create(t, { issuer: null, subject: null, email, name, role: 'student', status: 'active' }));
+    } else if (existing.role !== 'student') {
+      throw conflict(`${email} no és un compte d'alumnat.`);
+    } else if (existing.status === 'pending') {
+      // Adding a pending student to a group is the approval.
+      await userRepo.update(t, existing.id, { status: 'active' });
+      ids.push(existing.id);
+    } else if (existing.status !== 'active') {
+      throw conflict(`El compte ${email} està desactivat. Contacta amb administració.`);
+    } else {
+      ids.push(existing.id);
+    }
+  }
+
+  const unique = [...new Set(ids)];
+  // An active group always has at least one student.
+  if (unique.length === 0) throw badRequest('El grup ha de tenir almenys una persona.');
+  return unique;
+}
 
 // Students being added must be active students that are not yet in another
 // group of the same project (also guaranteed by a unique key).
@@ -23,16 +67,15 @@ async function assertAssignable(t, projectId, groupId, studentIds) {
   }
 }
 
+// Groups are managed by administrators and by the project's teachers.
 export async function create(user, projectId, body) {
-  requireAdmin(user);
-  // An active group always has at least one student.
-  const studentIds = v.idArray(body.student_ids, 'alumnat', { min: 1 });
-
   await db.tx(async (t) => {
     // The project lock serializes group numbering and task propagation.
     const project = await projectRepo.lock(t, projectId);
     if (!project) throw notFound("No s'ha trobat el projecte.");
+    await managerAccess(t, user, projectId);
     assertWritable(project);
+    const studentIds = await resolveStudents(t, body);
     await assertAssignable(t, projectId, null, studentIds);
 
     const groupId = await groupRepo.create(t, projectId, await groupRepo.nextNumber(t, projectId));
@@ -44,15 +87,14 @@ export async function create(user, projectId, body) {
 }
 
 export async function setStudents(user, groupId, body) {
-  requireAdmin(user);
-  const wanted = v.idArray(body.student_ids, 'alumnat', { min: 1 });
-
   const projectId = await db.tx(async (t) => {
     const group = await groupRepo.findById(t, groupId);
     if (!group) throw notFound("No s'ha trobat el grup.");
     const project = await projectRepo.lock(t, group.project_id);
+    await managerAccess(t, user, group.project_id);
     assertWritable(project);
 
+    const wanted = await resolveStudents(t, body);
     const current = (await groupRepo.members(t, groupId)).map((m) => m.id);
     const toAdd = wanted.filter((id) => !current.includes(id));
     const toRemove = current.filter((id) => !wanted.includes(id));
@@ -80,11 +122,11 @@ export async function setStudents(user, groupId, body) {
 // Only groups without any recorded activity can be deleted; anything else
 // would destroy history.
 export async function remove(user, groupId) {
-  requireAdmin(user);
   const projectId = await db.tx(async (t) => {
     const group = await groupRepo.findById(t, groupId);
     if (!group) throw notFound("No s'ha trobat el grup.");
     const project = await projectRepo.lock(t, group.project_id);
+    await managerAccess(t, user, group.project_id);
     assertWritable(project);
     if (await groupRepo.hasActivity(t, groupId)) {
       throw conflict("No es pot eliminar un grup que ja té activitat. Arxiva el projecte per conservar-ne l'historial.");

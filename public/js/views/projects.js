@@ -80,8 +80,8 @@ export async function renderProjects(view, params, { user }) {
     h('div', { class: 'page-header' },
       h('div', { class: 'titles' },
         h('h1', {}, user.role === 'student' ? 'Els meus projectes' : 'Projectes'),
-        user.role === 'teacher' ? h('p', { class: 'muted' }, 'Projectes on tens docència assignada.') : null),
-      user.role === 'admin'
+        user.role === 'teacher' ? h('p', { class: 'muted' }, 'Projectes que has creat o on tens docència assignada.') : null),
+      user.role !== 'student'
         ? h('div', { class: 'actions' },
             h('button', {
               class: 'btn primary', type: 'button',
@@ -93,7 +93,7 @@ export async function renderProjects(view, params, { user }) {
   if (projects.length === 0) {
     const text = {
       admin: 'Encara no hi ha cap projecte. Crea\'n el primer.',
-      teacher: 'Encara no tens cap projecte assignat.',
+      teacher: "Encara no tens cap projecte. Crea'n un o demana a administració que t'assigni a un d'existent.",
       student: 'Encara no formes part de cap grup de projecte.',
     }[user.role];
     append(view, h('div', { class: 'empty' }, text));

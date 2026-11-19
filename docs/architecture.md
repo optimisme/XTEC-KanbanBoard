@@ -53,7 +53,7 @@ created at the same time cannot miss each other.
 Task priority is the position in `task_definitions.sort_order`, read with
 `ORDER BY sort_order ASC, id ASC`. There is no priority column, enum, color or
 badge anywhere. Boards filter that single ordered list by state, so the
-columns of every group show tasks in the administrator's order. The one
+columns of every group show tasks in the order set by the project's managers. The one
 exception is the *Finalitzat* column, which is display-only history: it lists
 tasks in the order they were completed (`completed_at`, oldest first) and
 shows the completion date on each card.
@@ -69,7 +69,10 @@ table, and a test asserts that it does not exist.
 `accessService` is the only place that decides who may see or change what:
 
 - **admin** — every project.
-- **teacher** — projects listed in `project_teachers`.
+- **teacher** — projects listed in `project_teachers`. Inside those projects a
+  teacher has the same powers as an administrator (edit, tasks and their
+  order, import, groups, students, archive, duplicate), except deciding which
+  teachers belong to the project. Creating a project assigns its creator.
 - **student** — only the group they belong to.
 
 Every service resolves access through it (`projectAccess`, `groupAccess`,

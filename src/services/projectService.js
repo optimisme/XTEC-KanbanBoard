@@ -7,7 +7,7 @@ import * as userRepo from '../repositories/userRepository.js';
 import { badRequest, conflict, notFound } from '../utils/errors.js';
 import { renderMarkdown } from '../utils/markdown.js';
 import * as v from '../validators/index.js';
-import { assertWritable, projectAccess, requireAdmin } from './accessService.js';
+import { assertWritable, managerAccess, projectAccess, requireAdmin, requireStaff } from './accessService.js';
 
 function parseProject(body) {
   return {
@@ -71,20 +71,23 @@ export async function get(user, projectId, executor = db) {
   };
 }
 
+// Administrators and teachers create projects. A teacher who creates one is
+// assigned to it, which is what gives them access from then on.
 export async function create(user, body) {
-  requireAdmin(user);
+  requireStaff(user);
   const data = parseProject(body);
   const id = await db.tx(async (t) => {
     const moduleIds = await validModuleIds(t, body.module_ids);
     const projectId = await projectRepo.create(t, data);
     await moduleRepo.addToProject(t, projectId, moduleIds);
+    if (user.role === 'teacher') await projectRepo.addTeacher(t, projectId, user.id);
     return projectId;
   });
   return get(user, id);
 }
 
 export async function update(user, projectId, body) {
-  requireAdmin(user);
+  await managerAccess(db, user, projectId);
   const data = parseProject(body);
   await db.tx(async (t) => {
     const project = await projectRepo.lock(t, projectId);
@@ -110,12 +113,12 @@ export async function update(user, projectId, body) {
 }
 
 export async function setStatus(user, projectId, status) {
-  requireAdmin(user);
-  if (!(await projectRepo.findById(db, projectId))) throw notFound("No s'ha trobat el projecte.");
+  await managerAccess(db, user, projectId);
   await projectRepo.setStatus(db, projectId, status);
   return get(user, projectId);
 }
 
+// Which teachers belong to a project is decided by administrators only.
 export async function setTeachers(user, projectId, body) {
   requireAdmin(user);
   const teacherIds = v.idArray(body.teacher_ids, 'professorat');
@@ -134,9 +137,10 @@ export async function setTeachers(user, projectId, body) {
 
 // Copies the reusable definition of a project (modules, shared tasks and
 // their order) into a new project for another academic year. Teachers,
-// groups, students and every piece of progress are deliberately left behind.
+// groups, students and every piece of progress are deliberately left behind
+// (a teacher who duplicates a project becomes the teacher of the copy).
 export async function duplicate(user, projectId, body) {
-  requireAdmin(user);
+  await managerAccess(db, user, projectId);
   const newId = await db.tx(async (t) => {
     const source = await projectRepo.findById(t, projectId);
     if (!source) throw notFound("No s'ha trobat el projecte.");
@@ -147,6 +151,7 @@ export async function duplicate(user, projectId, body) {
       academic_year: body.academic_year ?? source.academic_year,
     });
     const id = await projectRepo.create(t, data);
+    if (user.role === 'teacher') await projectRepo.addTeacher(t, id, user.id);
 
     const modules = await moduleRepo.listForProject(t, projectId);
     await moduleRepo.addToProject(t, id, modules.map((m) => m.id));

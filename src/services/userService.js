@@ -20,6 +20,26 @@ function present(user) {
   };
 }
 
+export function assertInstitutionalEmail(email) {
+  const domain = email.slice(email.lastIndexOf('@') + 1);
+  if (!config.allowedEmailDomains.includes(domain)) {
+    throw badRequest(`El correu ha de ser d'un domini institucional (${config.allowedEmailDomains.join(', ')}).`);
+  }
+}
+
+// Tells a teacher or administrator whether an email already has an account,
+// before they add that person to a group.
+export async function lookupStudent(body) {
+  const email = v.email(body.email);
+  assertInstitutionalEmail(email);
+  const user = await userRepo.findByEmail(db, email);
+  if (!user) return { email, found: false };
+  let problem = null;
+  if (user.role !== 'student') problem = "Aquest correu no és d'un compte d'alumnat.";
+  else if (user.status === 'rejected' || user.status === 'disabled') problem = 'Aquest compte està desactivat. Contacta amb administració.';
+  return { email, found: true, id: user.id, name: user.name, problem };
+}
+
 // Adds a person by email before they have ever signed in. The account is
 // active from the start; on their first institutional login the verified
 // email links it to their identity, so no approval step is needed.
@@ -27,10 +47,7 @@ export async function create(body) {
   const email = v.email(body.email);
   const name = v.text(body.name, 'nom', { max: 200 });
   const role = v.oneOf(body.role, 'rol', ROLES);
-  const domain = email.slice(email.lastIndexOf('@') + 1);
-  if (!config.allowedEmailDomains.includes(domain)) {
-    throw badRequest(`El correu ha de ser d'un domini institucional (${config.allowedEmailDomains.join(', ')}).`);
-  }
+  assertInstitutionalEmail(email);
   try {
     const id = await userRepo.create(db, { issuer: null, subject: null, email, name, role, status: 'active' });
     return present(await userRepo.findById(db, id));

@@ -6,7 +6,7 @@ import * as groupTaskRepo from '../repositories/groupTaskRepository.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import { renderMarkdown } from '../utils/markdown.js';
 import * as v from '../validators/index.js';
-import { assertWritable, managerAccess, projectAccess, requireAdmin } from './accessService.js';
+import { assertWritable, managerAccess, projectAccess } from './accessService.js';
 
 export function presentTask(task, modules, { html = false } = {}) {
   return {
@@ -136,18 +136,19 @@ export async function update(user, taskId, body) {
 
 // Soft deletion: the task disappears from boards, its history is kept.
 export async function remove(user, taskId) {
-  requireAdmin(user);
   await db.tx(async (t) => {
     const task = await loadTask(t, taskId);
     const project = await projectRepo.lock(t, task.project_id);
+    await managerAccess(t, user, task.project_id);
     assertWritable(project);
     await taskRepo.softDelete(t, taskId);
   });
 }
 
-// Only administrators define the global order shared by all groups.
+// Administrators and the project's teachers define the global order shared
+// by all groups. Students never do.
 export async function reorder(user, projectId, body) {
-  requireAdmin(user);
+  await managerAccess(db, user, projectId);
   const taskIds = v.idArray(body.task_ids, 'tasques');
   await db.tx(async (t) => {
     const project = await projectRepo.lock(t, projectId);
