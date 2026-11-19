@@ -18,10 +18,10 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
   const isAdmin = project.access === 'admin';
   const writable = project.status === 'active';
 
-  const tabs = [['groups', 'Grups'], ['tasks', 'Tasques']];
+  const tabs = [['description', 'Descripció'], ['groups', 'Grups'], ['tasks', 'Tasques']];
   if (project.can_manage) tabs.push(['matrix', 'Matriu de progrés'], ['students', 'Alumnat']);
   if (project.can_manage) tabs.push(['settings', 'Configuració']);
-  const tab = tabs.some(([key]) => key === tabParam) ? tabParam : 'groups';
+  const tab = tabs.some(([key]) => key === tabParam) ? tabParam : 'description';
   const content = h('div', {});
   const reload = () => ctx.rerender();
   // "@xtec.cat, @iesesteveterradas.cat": the accounts the sign-in accepts.
@@ -37,14 +37,27 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
           h('span', {}, plural(project.task_count, 'tasca', 'tasques')),
           project.teachers.length ? h('span', {}, `Professorat: ${project.teachers.map((t) => t.name).join(', ')}`) : null)),
       project.status === 'archived' ? h('span', { class: 'tag' }, 'Arxivat · només lectura') : null),
-    project.description_html ? h('div', { class: 'card markdown', style: { 'margin-bottom': '20px' }, html: project.description_html }) : null,
     h('nav', { class: 'tabs', 'aria-label': 'Seccions del projecte' }, tabs.map(([key, label]) =>
       h('a', { href: `#/projects/${project.id}/${key}`, 'aria-current': key === tab ? 'page' : null }, label))),
     content
   );
 
-  const renderers = { groups: groupsTab, tasks: tasksTab, matrix: matrixTab, students: studentsTab, settings: settingsTab };
+  const renderers = { description: descriptionTab, groups: groupsTab, tasks: tasksTab, matrix: matrixTab, students: studentsTab, settings: settingsTab };
   await renderers[tab]();
+
+  // ---- Description -------------------------------------------------------------
+
+  function descriptionTab() {
+    append(content,
+      project.description_html
+        ? h('div', { class: 'card markdown', html: project.description_html })
+        : h('div', { class: 'empty' }, 'Aquest projecte encara no té descripció.'),
+      project.can_manage && writable
+        ? h('div', { class: 'card-actions' },
+            h('button', { class: 'btn', type: 'button', onClick: () => openProjectForm({ project, onSaved: reload }).catch(showError) },
+              project.description_html ? 'Edita la descripció' : 'Afegeix una descripció'))
+        : null);
+  }
 
   // ---- Groups ----------------------------------------------------------------
 

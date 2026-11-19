@@ -80,24 +80,56 @@ function projectCard(project, user) {
   );
 }
 
+// Whether archived projects are shown. Kept for the browser session, so the
+// choice survives moving between screens; they are hidden to start with.
+const ARCHIVED_KEY = 'kanban.showArchived';
+function showArchivedPreference() {
+  try { return sessionStorage.getItem(ARCHIVED_KEY) === '1'; } catch { return false; }
+}
+function rememberShowArchived(value) {
+  try { sessionStorage.setItem(ARCHIVED_KEY, value ? '1' : '0'); } catch { /* storage unavailable: not remembered */ }
+}
+
 export async function renderProjects(view, params, { user }) {
   const projects = await api.get('/api/projects');
   const active = projects.filter((p) => p.status === 'active');
   const archived = projects.filter((p) => p.status === 'archived');
+  let showArchived = showArchivedPreference();
 
-  append(view, 
+  const archivedSection = h('div', {});
+  const toggle = h('button', { class: 'btn', type: 'button', 'aria-controls': 'archived-projects' });
+  archivedSection.id = 'archived-projects';
+
+  function drawArchived() {
+    toggle.textContent = showArchived ? 'Amaga els arxivats' : `Mostra els arxivats (${archived.length})`;
+    toggle.setAttribute('aria-expanded', String(showArchived));
+    archivedSection.replaceChildren();
+    if (showArchived) {
+      append(archivedSection,
+        h('h2', { style: { margin: '28px 0 12px' } }, 'Projectes arxivats'),
+        h('div', { class: 'grid' }, archived.map((p) => projectCard(p, user))));
+    }
+  }
+  toggle.addEventListener('click', () => {
+    showArchived = !showArchived;
+    rememberShowArchived(showArchived);
+    drawArchived();
+  });
+
+  append(view,
     h('div', { class: 'page-header' },
       h('div', { class: 'titles' },
         h('h1', {}, user.role === 'student' ? 'Els meus projectes' : 'Projectes'),
         user.role === 'teacher' ? h('p', { class: 'muted' }, 'Projectes que has creat o on tens docència assignada.') : null),
-      // Projects are created by teachers; administrators only oversee them.
-      user.role === 'teacher'
-        ? h('div', { class: 'actions' },
-            h('button', {
+      h('div', { class: 'actions' },
+        archived.length > 0 ? toggle : null,
+        // Projects are created by teachers; administrators only oversee them.
+        user.role === 'teacher'
+          ? h('button', {
               class: 'btn primary', type: 'button',
               onClick: () => openProjectForm({ onSaved: (p) => { window.location.hash = `#/projects/${p.id}/settings`; } }),
-            }, 'Nou projecte'))
-        : null)
+            }, 'Nou projecte')
+          : null))
   );
 
   if (projects.length === 0) {
@@ -110,11 +142,10 @@ export async function renderProjects(view, params, { user }) {
     return;
   }
 
-  append(view, h('div', { class: 'grid' }, active.map((p) => projectCard(p, user))));
-  if (archived.length > 0) {
-    append(view, 
-      h('h2', { style: { margin: '28px 0 12px' } }, 'Projectes arxivats'),
-      h('div', { class: 'grid' }, archived.map((p) => projectCard(p, user)))
-    );
-  }
+  append(view,
+    active.length > 0
+      ? h('div', { class: 'grid' }, active.map((p) => projectCard(p, user)))
+      : h('div', { class: 'empty' }, 'No hi ha cap projecte actiu.'),
+    archivedSection);
+  drawArchived();
 }
