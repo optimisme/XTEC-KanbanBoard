@@ -49,6 +49,10 @@ export async function addTeacher(req, res) {
   res.status(201).json(await projectService.addTeacher(req.user, projectId(req), req.body));
 }
 
+export async function removeTeacher(req, res) {
+  res.json(await projectService.removeTeacher(req.user, projectId(req), v.id(req.params.userId, 'professor')));
+}
+
 export async function setTeachers(req, res) {
   res.json(await projectService.setTeachers(req.user, projectId(req), req.body));
 }

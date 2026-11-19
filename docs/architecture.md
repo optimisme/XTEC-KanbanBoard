@@ -75,8 +75,8 @@ transaction that saves the task.
 - **teacher** — projects listed in `project_teachers`. Inside those projects a
   teacher has the same powers as an administrator (edit, tasks and their
   order, import, groups, students, archive, duplicate). A teacher can add a
-  colleague who already has a teacher account, but cannot remove teachers or
-  create teacher accounts. Creating a project assigns its creator.
+  colleague by email (creating the teacher account if needed) and remove one,
+  but not themself. Creating a project assigns its creator.
 - **student** — only the group they belong to.
 
 Every service resolves access through it (`projectAccess`, `groupAccess`,

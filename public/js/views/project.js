@@ -53,7 +53,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
   function openGroupForm(group) {
     const members = (group ? group.students : []).map((s) => ({ email: s.email, name: s.name, isNew: false }));
     const listEl = h('ul', { class: 'member-list' });
-    const email = h('input', { type: 'email', placeholder: 'alumne@xtec.cat', autocomplete: 'off', 'aria-label': "Correu de l'alumne" });
+    const email = h('input', { type: 'text', placeholder: 'Nom o correu', autocomplete: 'off', 'aria-label': "Nom o correu de l'alumne" });
     const name = h('input', { type: 'text', maxlength: '200', placeholder: 'Nom i cognoms', autocomplete: 'off' });
     const nameField = h('div', { class: 'field', hidden: true },
       h('label', {}, "Aquest correu encara no té compte. Indica el nom de l'alumne per crear-lo:"), name);
@@ -134,7 +134,14 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       h('div', { class: 'field' },
         h('label', {}, `Afegeix una persona amb ${domainsText}`),
         h('div', { class: 'inline-form' }, email, add),
-        emailSuggestions(email, 'students')),
+        emailSuggestions(email, 'students', {
+          exclude: () => members.map((m) => m.email),
+          onPick: (person) => {
+            members.push({ email: person.email, name: person.name, isNew: false });
+            drawMembers();
+            reset();
+          },
+        })),
       nameField,
       message);
     const dialog = modal({ title: group ? `Alumnat del Grup ${group.group_number}` : 'Nou grup', body, footer: [save] });
@@ -315,54 +322,56 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
   // ---- Settings (administrators) -----------------------------------------------------
 
   async function settingsTab() {
-    // Removing a teacher saves at once. Only administrators can remove.
+    // Removing a teacher saves at once.
     async function removeTeacher(teacher, button) {
       const ok = await confirmDialog({
-        title: 'Treu del projecte',
+        title: 'Elimina del projecte',
         message: `${teacher.name} deixarà de tenir accés a aquest projecte. El seu compte es conserva.`,
-        confirmLabel: 'Treu', danger: true,
+        confirmLabel: 'Elimina', danger: true,
       });
       if (!ok) return;
       await run(button, async () => {
-        const remaining = project.teachers.filter((t) => t.id !== teacher.id).map((t) => t.id);
-        await api.put(`/api/projects/${project.id}/teachers`, { teacher_ids: remaining });
+        await api.del(`/api/projects/${project.id}/teachers/${teacher.id}`);
         toast(`${teacher.name} ja no és professor/a del projecte.`);
         reload();
       });
     }
 
-    // Teachers and administrators add a colleague by email. An email without
-    // an account asks for the person's name and creates a teacher account.
+    async function addTeacherByEmail(value) {
+      const found = await api.post('/api/teachers/lookup', { email: value });
+      if (found.found && found.problem) throw new Error(found.problem);
+      let name;
+      if (!found.found) {
+        name = await promptDialog({
+          title: 'Compte nou de professorat',
+          label: 'Nom i cognoms',
+          hint: `${value} encara no té compte. Es crearà amb aquest nom i podrà entrar amb el compte institucional.`,
+          confirmLabel: 'Crea i afegeix',
+        });
+        if (name === null) return;
+      }
+      await api.post(`/api/projects/${project.id}/teachers`, { email: value, name });
+      toast('Professorat afegit al projecte.');
+      reload();
+    }
+
     function addTeacherForm() {
-      const email = h('input', { type: 'email', required: true, placeholder: 'professor@xtec.cat', autocomplete: 'off', 'aria-label': 'Correu del professor o professora' });
+      const email = h('input', { type: 'text', required: true, placeholder: 'Nom o correu', autocomplete: 'off', 'aria-label': 'Nom o correu del professor o professora' });
       const add = h('button', { class: 'btn', type: 'submit' }, 'Afegeix');
       return h('form', {
         class: 'field', style: { 'margin-top': '14px' },
         onSubmit: (event) => {
           event.preventDefault();
-          run(add, async () => {
-            const value = email.value.trim().toLowerCase();
-            const found = await api.post('/api/teachers/lookup', { email: value });
-            if (found.found && found.problem) throw new Error(found.problem);
-            let name;
-            if (!found.found) {
-              name = await promptDialog({
-                title: 'Compte nou de professorat',
-                label: 'Nom i cognoms',
-                hint: `${value} encara no té compte. Es crearà amb aquest nom i podrà entrar amb el compte institucional.`,
-                confirmLabel: 'Crea i afegeix',
-              });
-              if (name === null) return;
-            }
-            await api.post(`/api/projects/${project.id}/teachers`, { email: value, name });
-            toast('Professorat afegit al projecte.');
-            reload();
-          });
+          run(add, () => addTeacherByEmail(email.value.trim().toLowerCase()));
         },
       },
         h('label', {}, `Afegeix professorat amb ${domainsText}`),
         h('div', { class: 'inline-form' }, email, add),
-        emailSuggestions(email, 'teachers'));
+        // Choosing a suggestion adds that teacher straight away.
+        emailSuggestions(email, 'teachers', {
+          exclude: () => project.teachers.map((t) => t.email),
+          onPick: (person) => run(add, () => addTeacherByEmail(person.email)),
+        }));
     }
 
     // Tags of the project: rename, recolor, delete, add.
@@ -490,14 +499,15 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         h('ul', { class: 'member-list' }, project.teachers.length === 0
           ? h('li', { class: 'muted' }, 'Aquest projecte encara no té professorat assignat.')
           : project.teachers.map((teacher) => {
-              const remove = h('button', { class: 'btn ghost small danger', type: 'button', 'aria-label': `Treu ${teacher.name}` }, 'Treu');
+              const remove = h('button', { class: 'btn ghost small danger', type: 'button', 'aria-label': `Elimina ${teacher.name}` }, 'Elimina');
               remove.addEventListener('click', () => removeTeacher(teacher, remove));
+              // A teacher cannot remove themself (an administrator or a colleague can).
+              const own = !isAdmin && teacher.id === ctx.user.id;
               return h('li', {},
                 h('div', {}, h('strong', {}, teacher.name), h('div', { class: 'muted' }, teacher.email)),
-                isAdmin && writable ? remove : null);
+                writable && !own ? remove : null);
             })),
-        writable ? addTeacherForm() : null,
-        isAdmin ? null : h('p', { class: 'muted', style: { 'margin-top': '10px' } }, "Per treure professorat d'aquest projecte, contacta amb administració.")),
+        writable ? addTeacherForm() : null),
       await tagsCard(),
       h('div', { class: 'card' },
         h('h2', {}, 'Cicle de vida'),

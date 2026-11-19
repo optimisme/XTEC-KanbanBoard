@@ -146,6 +146,22 @@ export async function addTeacher(user, projectId, body) {
   return get(user, projectId);
 }
 
+// Takes one teacher off the project; their account is not touched. Any
+// manager of the project can do it, but a teacher cannot remove themself, so a
+// project never loses its last teacher by accident.
+export async function removeTeacher(user, projectId, teacherId) {
+  const { project } = await managerAccess(db, user, projectId);
+  assertWritable(project);
+  if (user.role === 'teacher' && user.id === teacherId) {
+    throw conflict("No et pots treure a tu mateix del projecte. Demana-ho a un altre professor o a administració.");
+  }
+  if (!(await projectRepo.isTeacher(db, projectId, teacherId))) {
+    throw notFound("Aquesta persona no és professor/a del projecte.");
+  }
+  await projectRepo.removeTeacher(db, projectId, teacherId);
+  return get(user, projectId);
+}
+
 // Replacing the whole list of teachers (which can also remove them) is left
 // to administrators.
 export async function setTeachers(user, projectId, body) {

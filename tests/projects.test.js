@@ -567,10 +567,26 @@ test('teachers add other teachers to their project by email', async () => {
   assert.equal((await otherTeacher.get(`/api/projects/${projectId}`)).body.can_manage, true);
   assert.equal((await otherTeacher.post(`/api/projects/${projectId}/tasks`, taskBody({ title: 'By colleague' }))).status, 201);
 
-  // Removing teachers (replacing the list) is still for administrators.
+  // A teacher of the project removes a colleague (their account is kept), but not themself.
+  const remove = (client, userId) => client.del(`/api/projects/${projectId}/teachers/${userId}`);
+  const [pendingProf] = await db.query("SELECT id FROM users WHERE email = 'pending.prof@xtec.cat'");
+  assert.equal((await remove(student1, pendingProf.id)).status, 403);
+  const removed = await remove(teacher, pendingProf.id);
+  assert.equal(removed.status, 200);
+  assert.ok(!removed.body.teachers.some((t) => t.id === pendingProf.id));
+  assert.equal((await db.query('SELECT status FROM users WHERE id = ?', [pendingProf.id]))[0].status, 'active');
+  assert.equal((await remove(teacher, pendingProf.id)).status, 404); // no longer on the project
+  assert.equal((await remove(teacher, s.users.teacher.id)).status, 409); // cannot remove oneself
+  // Someone removed loses access at once and cannot remove others any more.
+  assert.equal((await remove(otherTeacher, s.users.teacher.id)).status, 200);
+  assert.equal((await teacher.get(`/api/projects/${projectId}`)).status, 403);
+  assert.equal((await remove(teacher, s.users.otherTeacher.id)).status, 403);
+  // An administrator can remove anyone, and can still replace the whole list.
+  assert.equal((await remove(s.admin, s.users.otherTeacher.id)).status, 200);
+  assert.equal((await otherTeacher.get(`/api/projects/${projectId}`)).status, 403);
   assert.equal((await otherTeacher.put(`/api/projects/${projectId}/teachers`, { teacher_ids: [s.users.otherTeacher.id] })).status, 403);
   assert.equal((await s.admin.put(`/api/projects/${projectId}/teachers`, { teacher_ids: [s.users.teacher.id] })).status, 200);
-  assert.equal((await otherTeacher.get(`/api/projects/${projectId}`)).status, 403);
+  assert.equal((await teacher.get(`/api/projects/${projectId}`)).body.can_manage, true);
 });
 
 test('known emails are suggested to staff while adding students or teachers', async () => {
@@ -586,8 +602,10 @@ test('known emails are suggested to staff while adding students or teachers', as
   assert.deepEqual((await suggest(teacher, 'teachers', 'teacher b')).body.map((p) => p.email), ['other@xtec.cat']);
   assert.deepEqual((await suggest(teacher, 'students', 'teacher')).body, []);
 
-  // Nothing for fewer than two characters, and wildcards are taken literally.
-  assert.deepEqual((await suggest(teacher, 'students', 's')).body, []);
+  // Suggestions start with the first character; nothing for an empty search. Wildcards are taken literally.
+  assert.ok((await suggest(teacher, 'students', 's')).body.length > 0);
+  assert.deepEqual((await suggest(teacher, 'students', '')).body, []);
+  assert.deepEqual((await suggest(teacher, 'students', '  ')).body, []);
   assert.deepEqual((await suggest(teacher, 'students', '%%')).body, []);
   assert.deepEqual((await suggest(teacher, 'students', '__')).body, []);
 

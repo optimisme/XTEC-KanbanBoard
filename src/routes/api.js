@@ -50,6 +50,7 @@ router.post('/projects/:projectId/unarchive', projects.unarchive);
 router.post('/projects/:projectId/duplicate', projects.duplicate);
 router.put('/projects/:projectId/teachers', projects.setTeachers);
 router.post('/projects/:projectId/teachers', projects.addTeacher);
+router.delete('/projects/:projectId/teachers/:userId', projects.removeTeacher);
 
 // Groups
 router.post('/projects/:projectId/groups', projects.createGroup);

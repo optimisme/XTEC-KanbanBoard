@@ -48,10 +48,10 @@ export async function lookupPerson(body, role) {
 }
 
 // Known people to offer while a teacher or administrator types an email.
-// Nothing is returned until two characters have been typed.
+// Nothing is returned for an empty search.
 export async function suggestPeople(query, role) {
   const text = typeof query.q === 'string' ? query.q.trim().slice(0, 100) : '';
-  if (text.length < 2) return [];
+  if (text.length < 1) return [];
   return userRepo.suggest(db, { role, text, limit: 8 });
 }
 

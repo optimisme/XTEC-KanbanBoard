@@ -331,9 +331,9 @@ Proxmox container.
 | Manage users (roles, approvals, disabling accounts) | ✔ | | |
 | Add a teacher to a project by email (creating the account if needed) | ✔ | ✔ | |
 | Create and manage the project's tags | ✔ | ✔ | |
-| Remove teachers from a project | ✔ | | |
+| Remove a teacher from a project (a teacher cannot remove themself) | ✔ | ✔ | |
 | Delete an archived project permanently | ✔ | | |
-| Create projects | ✔ | ✔ | |
+| Create projects | | ✔ | |
 | Edit, archive and duplicate a project | ✔ | ✔ | |
 | Create groups and add or remove their students (by email) | ✔ | ✔ | |
 | Create, edit, delete and reorder shared tasks; import from Markdown | ✔ | ✔ | |
@@ -347,10 +347,14 @@ Proxmox container.
 A teacher who creates (or duplicates) a project is assigned to it
 automatically. Its teachers can add colleagues by email; if the email has no
 account yet, they type the colleague's name and the teacher account is
-created. Only administrators remove teachers. An existing student account is
-never turned into a teacher this way. Teacher access
+created. They can also remove a colleague, but not themselves. An existing
+student account is never turned into a teacher this way. Teacher access
 depends **only** on that assignment (`project_teachers`).
-Tags classify and color tasks; they never grant or restrict permissions. Every rule is enforced by the backend.
+Tags classify and color tasks; they never grant or restrict permissions.
+
+The administrator's menu has only *Projectes* and *Usuaris*: administrators
+oversee every project but do not create them, and the blocked-tasks dashboard
+is a teacher screen. Every rule is enforced by the backend.
 
 ## Archiving and deleting projects
 
@@ -490,7 +494,7 @@ the `X-CSRF-Token` header (the token comes from `GET /api/session`).
 | Authentication | `GET /auth/login`, `GET <callback path>`, `POST /auth/password-login`, `POST /auth/logout`, `GET /api/session` |
 | Users | `GET /api/users`, `POST /api/users`, `POST /api/students/lookup`, `POST /api/teachers/lookup`, `PUT /api/profile/password`, `PATCH /api/users/:id`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`, `PATCH /api/profile` |
 | Tags | `GET/POST /api/projects/:id/tags`, `GET /api/projects/:id/tags/suggestions`, `PUT/DELETE /api/tags/:id` |
-| Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `DELETE /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers` |
+| Projects | `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `DELETE /api/projects/:id`, `POST …/archive`, `POST …/unarchive`, `POST …/duplicate`, `PUT …/teachers`, `POST …/teachers`, `DELETE …/teachers/:userId` |
 | Groups | `POST /api/projects/:id/groups`, `PUT /api/groups/:id/students`, `DELETE /api/groups/:id`, `PUT /api/groups/:id/github`, `GET /api/groups/:id/board` |
 | Shared tasks | `GET/POST /api/projects/:id/tasks`, `PUT /api/projects/:id/tasks/order`, `GET/PUT/DELETE /api/tasks/:id`, `GET /api/tasks/:id/versions` |
 | Import | `GET /api/projects/:id/import/template`, `POST …/import/preview`, `POST …/import` |

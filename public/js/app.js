@@ -15,7 +15,7 @@ const routes = [
   { pattern: /^\/projects\/(\d+)\/students\/(\d+)$/, render: renderContributions, nav: 'projects' },
   { pattern: /^\/projects\/(\d+)(?:\/(\w+))?$/, render: renderProject, nav: 'projects' },
   { pattern: /^\/groups\/(\d+)(?:\/task\/(\d+))?$/, render: renderBoard, nav: 'projects', wide: true },
-  { pattern: /^\/blocked$/, render: renderBlocked, nav: 'blocked', roles: ['admin', 'teacher'] },
+  { pattern: /^\/blocked$/, render: renderBlocked, nav: 'blocked', roles: ['teacher'] },
   { pattern: /^\/admin\/users$/, render: renderUsers, nav: 'users', roles: ['admin'] },
   { pattern: /^\/profile$/, render: renderProfile, nav: 'profile' },
 ];
@@ -130,7 +130,8 @@ function renderShell(route) {
     h('a', { href: `#${href}`, 'aria-current': route && route.nav === key ? 'page' : null }, label);
 
   const nav = [link('/', user.role === 'student' ? 'Els meus projectes' : 'Projectes', 'projects')];
-  if (user.role !== 'student') nav.push(link('/blocked', 'Tasques bloquejades', 'blocked'));
+  // Administrators only oversee: their menu is Projectes and Usuaris.
+  if (user.role === 'teacher') nav.push(link('/blocked', 'Tasques bloquejades', 'blocked'));
   if (user.role === 'admin') nav.push(link('/admin/users', 'Usuaris', 'users'));
 
   const main = h('main', { class: `main ${route && route.wide ? 'wide' : ''}`, id: 'main', tabindex: '-1' });
