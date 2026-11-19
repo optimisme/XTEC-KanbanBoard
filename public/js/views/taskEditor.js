@@ -54,7 +54,7 @@ export async function openTaskEditor({ projectId, taskId = null, onSaved }) {
 
 export async function openVersions(taskId) {
   const versions = await api.get(`/api/tasks/${taskId}/versions`);
-  const body = h('div', {}, versions.map((v) =>
+  const body = h('div', { class: 'tab-scroll', tabindex: '0' }, versions.map((v) =>
     h('details', { class: 'box', open: v.current },
       h('summary', {},
         h('strong', {}, `Versió ${v.version}`),
@@ -64,13 +64,13 @@ export async function openVersions(taskId) {
       h('div', { class: 'chips', style: { 'margin-bottom': '10px' } }, v.tags.map((tag) => h('span', { class: 'tag' }, tag.name))),
       h('div', { class: 'section-title' }, 'Descripció'),
       v.description_html ? h('div', { class: 'markdown', html: v.description_html }) : h('p', { class: 'muted' }, 'Sense descripció.'))));
-  modal({ title: 'Historial de versions', body, wide: true });
+  modal({ title: 'Historial de versions', body, wide: true, fit: true });
 }
 
 // Read-only view of a shared definition, with management actions for staff.
 export async function openDefinition(taskId, { canManage, writable, onChanged }) {
   const task = await api.get(`/api/tasks/${taskId}`);
-  const body = h('div', {},
+  const body = h('div', { class: 'tab-scroll', tabindex: '0' },
     h('div', { class: 'detail-meta' },
       tagChips(task.tags),
       h('span', { class: 'muted' }, `Versió ${task.version} · ${task.author.name} · ${formatDateTime(task.updated_at)}`)),
@@ -88,7 +88,7 @@ export async function openDefinition(taskId, { canManage, writable, onChanged })
           : null,
       ]
     : null;
-  const dialog = modal({ title: task.title, body, footer, wide: true });
+  const dialog = modal({ title: task.title, body, footer, wide: true, fit: true });
 }
 
 // Initial Markdown import: paste or load a file, preview, then import.
@@ -139,12 +139,12 @@ export function openImport({ project, onDone }) {
     onDone();
   }));
 
-  const body = h('div', {},
+  const body = h('div', { class: 'tab-scroll' },
     h('div', { class: 'notice' },
       'La importació només és possible mentre el projecte no té cap tasca. Cada títol de nivell 2 (##) és una tasca i l\'ordre del document serà l\'ordre global. ',
       h('a', { href: `/api/projects/${project.id}/import/template`, download: 'plantilla-tasques.md' }, 'Baixa la plantilla d\'exemple')),
     h('div', { class: 'field' }, h('label', {}, 'Carrega un fitxer Markdown'), file),
     field('…o enganxa aquí el contingut', text),
     previewBox);
-  const dialog = modal({ title: 'Importa tasques des de Markdown', body, footer: [previewButton, importButton], wide: true });
+  const dialog = modal({ title: 'Importa tasques des de Markdown', body, footer: [previewButton, importButton], wide: true, fit: true });
 }

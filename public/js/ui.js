@@ -83,6 +83,9 @@ export const EVENT_LABELS = {
   collaborator_removed: 'ha tret un col·laborador',
 };
 
+// "Grup 2", or "Grup 2: Els Pingüins" when the group has been given a name.
+export const groupLabel = (number, name) => (name ? `Grup ${number}: ${name}` : `Grup ${number}`);
+
 export function statusBadge(status) {
   return h('span', { class: `status ${status}` }, icon(status), STATUS_LABELS[status]);
 }

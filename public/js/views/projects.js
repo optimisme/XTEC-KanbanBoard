@@ -1,6 +1,6 @@
 // Project listing ("Els meus projectes") and the project create/edit form.
 import { api } from '../api.js';
-import { append, field, h, modal, run, toggleSwitch } from '../ui.js';
+import { append, field, groupLabel, h, modal, run, toggleSwitch } from '../ui.js';
 
 const YEARS_AHEAD = 5;
 
@@ -74,7 +74,7 @@ function projectCard(project, user) {
     h('div', { class: 'meta' },
       h('span', {}, `Curs ${project.academic_year}`),
       user.role === 'student'
-        ? h('span', {}, `Grup ${project.my_group_number}`)
+        ? h('span', {}, groupLabel(project.my_group_number, project.my_group_name))
         : h('span', {}, `${project.group_count} ${project.group_count === 1 ? 'grup' : 'grups'}`),
       h('span', {}, `${project.task_count} ${project.task_count === 1 ? 'tasca' : 'tasques'}`))
   );

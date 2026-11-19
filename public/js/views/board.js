@@ -2,7 +2,7 @@
 // "move to" control on every card. Cards always follow the global task order.
 import { api } from '../api.js';
 import {
-  append, avatar, clear, formatDateTime, h, icon, modal, toggleSwitch, tagChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
+  append, avatar, clear, formatDateTime, groupLabel, h, icon, modal, toggleSwitch, tagChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
 } from '../ui.js';
 import { changeTaskStatus, openTaskModal } from './taskModal.js';
 
@@ -179,7 +179,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
           h('a', { href: '#/' }, user.role === 'student' ? 'Els meus projectes' : 'Projectes'), ' / ',
           // Students have no project page: the board is their whole view.
           board.can_manage ? h('a', { href: `#/projects/${board.project.id}` }, board.project.name) : board.project.name),
-        h('h1', {}, `Grup ${board.group.group_number}`)),
+        h('h1', {}, groupLabel(board.group.group_number, board.group.name))),
       h('div', { class: 'actions' },
         board.project.status === 'archived' ? h('span', { class: 'tag' }, 'Projecte arxivat · només lectura') : null,
         board.can_manage && board.project.status === 'active'

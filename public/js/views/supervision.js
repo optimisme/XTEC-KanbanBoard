@@ -1,7 +1,7 @@
 // Teacher supervision: blocked tasks dashboard and individual student
 // contribution view.
 import { api } from '../api.js';
-import { append, clear, formatDateTime, formatDuration, h, secondsSince, showError, statusBadge } from '../ui.js';
+import { append, clear, formatDateTime, formatDuration, groupLabel, h, secondsSince, showError, statusBadge } from '../ui.js';
 import { historyItem, openTaskModal } from './taskModal.js';
 
 export async function renderBlocked(view) {
@@ -24,7 +24,7 @@ export async function renderBlocked(view) {
         h('th', {}, 'Motiu del bloqueig'), h('th', {}, 'Temps bloquejada'), h('th', {}, 'Bloquejada el'), h('th', {}, ''))),
       h('tbody', {}, tasks.map((t) => h('tr', {},
         h('td', {}, h('a', { href: `#/projects/${t.project_id}` }, t.project_name)),
-        h('td', {}, h('a', { href: `#/groups/${t.group_id}` }, `Grup ${t.group_number}`)),
+        h('td', {}, h('a', { href: `#/groups/${t.group_id}` }, groupLabel(t.group_number, t.group_name))),
         h('td', {}, t.title),
         h('td', {}, t.responsible_name || h('span', { class: 'muted' }, 'Sense responsable')),
         h('td', { style: { 'max-width': '320px', 'overflow-wrap': 'anywhere' } }, t.reason),
@@ -78,7 +78,7 @@ export async function renderContributions(view, [projectId, studentId]) {
         h('div', { class: 'meta', style: { 'margin-top': '6px' } },
           h('span', {}, data.student.email),
           data.group
-            ? h('a', { href: `#/groups/${data.group.id}` }, `Grup ${data.group.group_number}`)
+            ? h('a', { href: `#/groups/${data.group.id}` }, groupLabel(data.group.group_number, data.group.name))
             : h('span', {}, 'Actualment sense grup en aquest projecte')))),
     h('div', { class: 'notice' },
       'Ser responsable d\'una tasca no demostra haver-ne fet tota la feina. Aquesta vista separa la responsabilitat de les accions realment registrades (finalitzacions, comentaris i bloquejos).'),

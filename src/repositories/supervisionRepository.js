@@ -17,7 +17,7 @@ export function matrixCells(db, projectId) {
 export function blockedTasks(db, teacherId) {
   return db.query(
     `SELECT gt.id AS group_task_id, p.id AS project_id, p.name AS project_name,
-            g.id AS group_id, g.group_number, td.title, td.sort_order,
+            g.id AS group_id, g.group_number, g.name AS group_name, td.title, td.sort_order,
             gt.responsible_user_id, ru.name AS responsible_name,
             be.reason, be.blocked_at, bu.name AS blocked_by_name
        FROM group_tasks gt
@@ -35,7 +35,7 @@ export function blockedTasks(db, teacherId) {
   );
 }
 
-const TASK_REF = `gt.id AS group_task_id, gt.group_id, g.group_number, td.title, td.sort_order, gt.status`;
+const TASK_REF = `gt.id AS group_task_id, gt.group_id, g.group_number, g.name AS group_name, td.title, td.sort_order, gt.status`;
 const TASK_JOIN = `
   JOIN group_tasks gt ON gt.id = x.group_task_id AND gt.project_id = ?
   JOIN task_definitions td ON td.id = gt.task_id
@@ -110,7 +110,7 @@ export function comments(db, projectId, userId) {
 // Responsibility events the student performed, received or lost.
 export function transfers(db, projectId, userId) {
   return db.query(
-    `SELECT hx.*, gt.group_id, g.group_number, td.title
+    `SELECT hx.*, gt.group_id, g.group_number, g.name AS group_name, td.title
        FROM (${HISTORY_SELECT}
               WHERE h.event_type IN ('auto_assigned', 'responsibility_transferred')
                 AND (h.actor_id = ? OR h.old_value = ? OR h.new_value = ?)) hx
@@ -124,7 +124,7 @@ export function transfers(db, projectId, userId) {
 
 export function recentActivity(db, projectId, userId, limit) {
   return db.query(
-    `SELECT hx.*, gt.group_id, g.group_number, td.title
+    `SELECT hx.*, gt.group_id, g.group_number, g.name AS group_name, td.title
        FROM (${HISTORY_SELECT} WHERE h.actor_id = ?) hx
        JOIN group_tasks gt ON gt.id = hx.group_task_id AND gt.project_id = ?
        JOIN task_definitions td ON td.id = gt.task_id

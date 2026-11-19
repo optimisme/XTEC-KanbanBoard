@@ -2,7 +2,7 @@
 // students and (administrators only) settings.
 import { api } from '../api.js';
 import {
-  append, clear, confirmDialog, field, h, icon, modal, plainInput, promptDialog, readableTextColor, run, showError,
+  append, clear, confirmDialog, field, groupLabel, h, icon, modal, plainInput, promptDialog, readableTextColor, run, showError,
   STATUS_LABELS, tagChip, tagChips,
   STATUSES, statusBadge, toast,
 } from '../ui.js';
@@ -80,6 +80,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       h('label', {}, "Aquest correu encara no té compte. Indica el nom de l'alumne per crear-lo:"), name);
     const message = h('div', { class: 'notice error', role: 'alert', hidden: true });
     const add = h('button', { class: 'btn', type: 'button' }, 'Afegeix');
+    const groupName = h('input', { type: 'text', maxlength: '40', autocomplete: 'off', value: group && group.name ? group.name : '' });
     const save = h('button', { class: 'btn primary', type: 'button' }, group ? 'Desa' : 'Crea el grup');
     let pendingEmail = null; // email waiting for a name
 
@@ -139,7 +140,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
     save.addEventListener('click', () => {
       if (members.length === 0) return fail('El grup ha de tenir almenys una persona.');
       return run(save, async () => {
-        const body = { students: members.map((m) => ({ email: m.email, name: m.name })) };
+        const body = { name: groupName.value, students: members.map((m) => ({ email: m.email, name: m.name })) };
         if (group) await api.put(`/api/groups/${group.id}/students`, body);
         else await api.post(`/api/projects/${project.id}/groups`, body);
         dialog.close();
@@ -151,6 +152,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       h('p', { class: 'muted' }, group
         ? "Si treus una persona del grup, les seves tasques queden sense responsable; l'historial es conserva."
         : `El grup nou serà el Grup ${project.groups.length ? Math.max(...project.groups.map((g) => g.group_number)) + 1 : 0} i rebrà totes les tasques del projecte com a pendents.`),
+      field('Nom del grup (opcional)', groupName, 'Un text curt que es mostra al costat del número, per exemple «Grup 2: Els Pingüins».'),
       h('div', { class: 'field' }, h('label', {}, 'Alumnat del grup'), listEl),
       h('div', { class: 'field' },
         h('label', {}, `Afegeix una persona amb ${domainsText}`),
@@ -165,7 +167,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         })),
       nameField,
       message);
-    const dialog = modal({ title: group ? `Alumnat del Grup ${group.group_number}` : 'Nou grup', body, footer: [save] });
+    const dialog = modal({ title: group ? groupLabel(group.group_number, group.name) : 'Nou grup', body, footer: [save] });
     drawMembers();
     email.focus();
   }
@@ -176,40 +178,42 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       const remove = h('button', { class: 'btn small danger', type: 'button' }, 'Elimina');
       remove.addEventListener('click', async () => {
         const ok = await confirmDialog({
-          title: `Elimina el Grup ${group.group_number}`,
+          title: `Elimina el ${groupLabel(group.group_number, group.name)}`,
           message: 'Només es poden eliminar grups sense cap activitat. Aquesta acció no es pot desfer.',
           confirmLabel: 'Elimina', danger: true,
         });
         if (ok) await run(remove, async () => { await api.del(`/api/groups/${group.id}`); reload(); });
       });
 
-      return h('div', { class: 'card' },
-        h('div', { class: 'card-title' },
-          h('h2', {}, `Grup ${group.group_number}`),
-          project.my_group_id === group.id ? h('span', { class: 'tag' }, 'El meu grup') : null),
-        h('div', { class: 'muted' }, group.students.map((s) => s.name).join(', ') || 'Sense alumnat'),
-        total > 0
+      // One full-width row per group: who and where, progress, actions.
+      return h('div', { class: 'card group-row' },
+        h('div', { class: 'group-info' },
+          h('div', { class: 'card-title' },
+            h('h2', {}, groupLabel(group.group_number, group.name)),
+            project.my_group_id === group.id ? h('span', { class: 'tag' }, 'El meu grup') : null),
+          h('div', { class: 'muted' }, group.students.map((s) => s.name).join(', ') || 'Sense alumnat'),
+          h('div', { class: 'meta' },
+            group.github_url
+              ? h('a', { href: group.github_url, target: '_blank', rel: 'noopener noreferrer' }, group.github_url.replace('https://github.com/', 'github.com/'))
+              : h('span', {}, 'Sense repositori de GitHub'))),
+        h('div', { class: 'group-progress' }, total > 0
           ? [
               h('div', { class: 'progress', role: 'img', 'aria-label': STATUSES.map((s) => `${STATUS_LABELS[s]}: ${group.progress[s]}`).join(', ') },
                 STATUSES.map((s) => h('span', { class: s, style: { width: `${(group.progress[s] / total) * 100}%` } }))),
               h('div', { class: 'meta' }, STATUSES.filter((s) => group.progress[s] > 0).map((s) => h('span', {}, `${STATUS_LABELS[s]}: ${group.progress[s]}`))),
             ]
-          : null,
-        h('div', { class: 'meta', style: { 'margin-top': '8px' } },
-          group.github_url
-            ? h('a', { href: group.github_url, target: '_blank', rel: 'noopener noreferrer' }, group.github_url.replace('https://github.com/', 'github.com/'))
-            : h('span', {}, 'Sense repositori de GitHub')),
+          : h('span', { class: 'muted' }, 'Sense tasques')),
         h('div', { class: 'card-actions' },
           h('a', { class: 'btn small primary', href: `#/groups/${group.id}` }, 'Obre el tauler'),
-          project.can_manage && writable ? h('button', { class: 'btn small', type: 'button', onClick: () => openGroupForm(group) }, "Edita l'alumnat") : null,
+          project.can_manage && writable ? h('button', { class: 'btn small', type: 'button', onClick: () => openGroupForm(group) }, 'Edita el grup') : null,
           project.can_manage && writable ? remove : null));
     });
 
     append(content, 
       project.can_manage && writable
-        ? h('div', { class: 'toolbar' }, h('button', { class: 'btn primary', type: 'button', onClick: () => openGroupForm(null) }, 'Nou grup'))
+        ? h('div', { class: 'toolbar end' }, h('button', { class: 'btn primary', type: 'button', onClick: () => openGroupForm(null) }, 'Nou grup'))
         : null,
-      cards.length ? h('div', { class: 'grid' }, cards) : h('div', { class: 'empty' }, 'Aquest projecte encara no té grups.')
+      cards.length ? h('div', { class: 'group-list' }, cards) : h('div', { class: 'empty' }, 'Aquest projecte encara no té grups.')
     );
   }
 
@@ -236,16 +240,17 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
 
     function draw() {
       append(clear(toolbar), 
+        // The hint stays on the left; the actions sit at the right end of the row.
+        h('span', { class: 'muted grow' }, project.can_manage
+          ? "L'ordre de la llista és l'ordre global de les tasques per a tots els grups."
+          : "Les tasques es mostren en l'ordre global definit pel professorat."),
         project.can_manage && writable
           ? h('button', { class: 'btn primary', type: 'button', onClick: () => openTaskEditor({ projectId: project.id, onSaved: refresh }).catch(showError) }, 'Nova tasca')
           : null,
         // The import is offered only while the project has no tasks at all.
         project.can_manage && writable && tasks.length === 0
           ? h('button', { class: 'btn', type: 'button', onClick: () => openImport({ project, onDone: refresh }) }, 'Importa des de Markdown')
-          : null,
-        h('span', { class: 'muted' }, project.can_manage
-          ? "L'ordre de la llista és l'ordre global de les tasques per a tots els grups."
-          : "Les tasques es mostren en l'ordre global definit pel professorat.")
+          : null
       );
 
       append(clear(listEl), tasks.map((task, index) => {
@@ -309,11 +314,11 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
                 h('span', { class: 'col-num' }, String(t.position)))))),
             h('tbody', {}, matrix.groups.map((group) => h('tr', {},
               h('th', { class: 'group-head', scope: 'row' },
-                h('a', { href: `#/groups/${group.id}` }, h('strong', {}, `Grup ${group.group_number}`)),
+                h('a', { href: `#/groups/${group.id}` }, h('strong', {}, groupLabel(group.group_number, group.name))),
                 h('small', {}, group.students.map((s) => s.name).join(', '))),
               matrix.tasks.map((t) => {
                 const cell = group.cells[t.id];
-                const label = `Grup ${group.group_number} · ${t.title}: ${STATUS_LABELS[cell.status]}${cell.responsible_name ? ` (${cell.responsible_name})` : ''}`;
+                const label = `${groupLabel(group.group_number, group.name)} · ${t.title}: ${STATUS_LABELS[cell.status]}${cell.responsible_name ? ` (${cell.responsible_name})` : ''}`;
                 return h('td', {},
                   h('button', {
                     class: `cell ${cell.status}`, type: 'button', title: label, 'aria-label': label,
@@ -336,7 +341,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       h('tr', {},
         h('td', {}, student.name),
         h('td', { class: 'muted' }, student.email),
-        h('td', {}, h('a', { href: `#/groups/${group.id}` }, `Grup ${group.group_number}`)),
+        h('td', {}, h('a', { href: `#/groups/${group.id}` }, groupLabel(group.group_number, group.name))),
         h('td', { class: 'actions' }, h('a', { class: 'btn small', href: `#/projects/${project.id}/students/${student.id}` }, 'Veu l\'activitat')))));
     append(content, rows.length
       ? h('div', { class: 'table-wrap' }, h('table', {},

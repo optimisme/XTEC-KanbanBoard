@@ -68,6 +68,14 @@ async function assertAssignable(t, projectId, groupId, studentIds) {
   }
 }
 
+// The optional short name shown next to the group's number. An absent field
+// leaves the name as it is; an empty one removes it.
+async function applyName(t, groupId, body) {
+  if (body.name === undefined) return;
+  const name = v.text(body.name, 'nom del grup', { max: 40, required: false });
+  await groupRepo.setName(t, groupId, name || null);
+}
+
 // Groups are managed by administrators and by the project's teachers.
 export async function create(user, projectId, body) {
   await db.tx(async (t) => {
@@ -80,6 +88,7 @@ export async function create(user, projectId, body) {
     await assertAssignable(t, projectId, null, studentIds);
 
     const groupId = await groupRepo.create(t, projectId, await groupRepo.nextNumber(t, projectId));
+    await applyName(t, groupId, body);
     await groupRepo.addStudents(t, groupId, projectId, studentIds);
     // The new group receives every shared task, pending and unassigned.
     await groupTaskRepo.createForGroup(t, groupId, projectId);
@@ -121,6 +130,7 @@ export async function setStudents(user, groupId, body) {
       }
     }
     await groupRepo.removeStudents(t, groupId, toRemove);
+    await applyName(t, groupId, body);
     return group.project_id;
   });
   return projectService.get(user, projectId);

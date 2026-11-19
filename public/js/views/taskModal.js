@@ -2,7 +2,7 @@
 // blocking events and activity history.
 import { api } from '../api.js';
 import {
-  append, avatar, clear, EVENT_LABELS, formatDateTime, formatDuration, h, icon, modal, tagChips,
+  append, avatar, clear, EVENT_LABELS, formatDateTime, formatDuration, groupLabel, h, icon, modal, tagChips,
   promptDialog, run, secondsSince, STATUS_LABELS, statusBadge, toast,
 } from '../ui.js';
 
@@ -65,7 +65,7 @@ export function historyItem(event, { withTask = false } = {}) {
       h('span', { class: 'when' }, formatDateTime(event.created_at))),
     detail || withTask
       ? h('div', { class: 'history-detail' },
-          withTask ? h('span', { class: 'muted' }, `${event.title} · Grup ${event.group_number}`) : null,
+          withTask ? h('span', { class: 'muted' }, `${event.title} · ${groupLabel(event.group_number, event.group_name)}`) : null,
           detail)
       : null);
 }
@@ -268,7 +268,7 @@ export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly
 
     append(clear(content),
       h('div', { class: 'detail-meta' },
-        h('span', { class: 'muted' }, `${task.project.name} · Grup ${task.group.group_number}`),
+        h('span', { class: 'muted' }, `${task.project.name} · ${groupLabel(task.group.group_number, task.group.name)}`),
         tagChips(task.tags)),
       h('div', { class: 'detail-layout' },
         h('div', { class: 'detail-main' },

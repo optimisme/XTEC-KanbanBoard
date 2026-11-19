@@ -116,6 +116,25 @@ test('9. new groups receive all existing task definitions', async () => {
   s.group2 = group2;
 });
 
+test('groups: an optional short name next to the number', async () => {
+  const members = { student_ids: [s.users.s4.id] };
+  const groupOf = (res) => res.body.groups.find((g) => g.id === s.group2.id);
+  assert.equal(s.group2.name, null);
+
+  const named = await teacher.put(`/api/groups/${s.group2.id}/students`, { ...members, name: '  Els Pingüins ' });
+  assert.equal(named.status, 200);
+  assert.equal(groupOf(named).name, 'Els Pingüins');
+  assert.equal(groupOf(named).group_number, 2);
+  assert.equal((await s.admin.get(`/api/groups/${s.group2.id}/board`)).body.group.name, 'Els Pingüins');
+
+  // Leaving the field out keeps the name; too long is rejected; empty removes it.
+  assert.equal(groupOf(await teacher.put(`/api/groups/${s.group2.id}/students`, members)).name, 'Els Pingüins');
+  assert.equal((await teacher.put(`/api/groups/${s.group2.id}/students`, { ...members, name: 'x'.repeat(41) })).status, 400);
+  assert.equal((await teacher.put(`/api/groups/${s.group2.id}/students`, { ...members, name: 42 })).status, 400);
+  assert.equal((await student1.put(`/api/groups/${s.group2.id}/students`, { ...members, name: 'Hacked' })).status, 403);
+  assert.equal(groupOf(await teacher.put(`/api/groups/${s.group2.id}/students`, { ...members, name: '' })).name, null);
+});
+
 test('groups: numbering, membership rules and validation', async () => {
   // A student cannot be in two groups of the same project.
   const dup = await s.admin.post(`/api/projects/${s.project.id}/groups`, { student_ids: [s.users.s1.id] });

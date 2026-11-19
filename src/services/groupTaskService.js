@@ -101,7 +101,7 @@ export async function detail(user, groupTaskId) {
   return {
     ...presentCard(row, tags.get(row.task_id), collaborators.get(groupTaskId), access, user),
     project: { id: access.project.id, name: access.project.name, status: access.project.status },
-    group: { id: access.group.id, group_number: access.group.group_number },
+    group: { id: access.group.id, group_number: access.group.group_number, name: access.group.name },
     access: access.level,
     can_manage: access.canManage,
     can_contribute: access.project.status !== 'archived',

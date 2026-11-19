@@ -27,7 +27,7 @@ export function listForTeacher(db, userId) {
 
 export function listForStudent(db, userId) {
   return db.query(
-    `SELECT ${COLUMNS}, g.id AS my_group_id, g.group_number AS my_group_number
+    `SELECT ${COLUMNS}, g.id AS my_group_id, g.group_number AS my_group_number, g.name AS my_group_name
        FROM projects p
        JOIN group_students gs ON gs.project_id = p.id AND gs.user_id = ?
        JOIN project_groups g ON g.id = gs.group_id

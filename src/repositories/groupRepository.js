@@ -1,4 +1,4 @@
-const COLUMNS = 'g.id, g.project_id, g.group_number, g.github_url, g.created_at, g.updated_at';
+const COLUMNS = 'g.id, g.project_id, g.group_number, g.name, g.github_url, g.created_at, g.updated_at';
 
 export async function findById(db, id) {
   const rows = await db.query(`SELECT ${COLUMNS} FROM project_groups g WHERE g.id = ?`, [id]);
@@ -30,6 +30,10 @@ export async function create(db, projectId, groupNumber) {
 export async function remove(db, groupId) {
   await db.query('DELETE FROM group_students WHERE group_id = ?', [groupId]);
   await db.query('DELETE FROM project_groups WHERE id = ?', [groupId]);
+}
+
+export async function setName(db, groupId, name) {
+  await db.query('UPDATE project_groups SET name = ? WHERE id = ?', [name, groupId]);
 }
 
 export async function setGithubUrl(db, groupId, url) {

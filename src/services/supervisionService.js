@@ -47,6 +47,7 @@ export async function matrix(user, projectId, query) {
     groups: groups.map((g) => ({
       id: g.id,
       group_number: g.group_number,
+      name: g.name,
       students: members.get(g.id) || [],
       cells: byGroup.get(g.id),
     })),
@@ -79,7 +80,7 @@ export async function contributions(user, projectId, studentId) {
 
   return {
     student: { id: student.id, name: student.name, email: student.email },
-    group: group ? { id: group.id, group_number: group.group_number } : null,
+    group: group ? { id: group.id, group_number: group.group_number, name: group.name } : null,
     assigned,
     collaborating,
     completed,
