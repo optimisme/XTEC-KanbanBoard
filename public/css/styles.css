@@ -445,10 +445,17 @@ body.reordering { cursor: grabbing; user-select: none; -webkit-user-select: none
 
 /* ---- Matrix ------------------------------------------------------------ */
 
-.matrix-wrap { overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); max-height: 70vh; }
+/* The matrix is as tall as its rows: only the page scrolls up and down, and
+   the box scrolls sideways when the tasks do not fit. */
+.matrix-wrap { overflow-x: auto; overflow-y: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
 .matrix { border-collapse: separate; border-spacing: 0; width: auto; }
 .matrix th, .matrix td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); padding: 6px; }
-.matrix thead th { position: sticky; top: 0; z-index: 2; vertical-align: bottom; min-width: 46px; max-width: 46px; text-align: center; }
+/* When the page scrolls past the header, its bottom strip (the task numbers)
+   stays under the top bar. A box that scrolls sideways cannot use "sticky"
+   against the page, so the script of the matrix sets --stick to how far the
+   header has to be pushed down. */
+.matrix thead th { position: relative; z-index: 2; transform: translateY(var(--stick, 0px)); vertical-align: bottom; min-width: 46px; max-width: 46px; text-align: center; }
+.matrix.stuck thead th { box-shadow: 0 3px 6px rgba(16, 24, 40, 0.14); }
 .matrix thead th .col-title {
   /* inline-block, so the header's centring also applies to the rotated title */
   display: inline-block; vertical-align: bottom;

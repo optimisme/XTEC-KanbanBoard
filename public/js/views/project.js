@@ -502,6 +502,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
               }))))))
       );
       if (scrolled) [holder.firstChild.scrollLeft, holder.firstChild.scrollTop] = scrolled;
+      stick();
     }
 
     filter.addEventListener('change', () => draw().catch(showError));
@@ -512,6 +513,37 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         h('label', { for: 'matrix-tag' }, 'Filtra per etiqueta'), filter,
         h('div', { class: 'legend' }, STATUSES.map(statusBadge))),
       holder);
+    // Only the page scrolls up and down. Once the header of the matrix has
+    // scrolled out, its bottom strip (the task numbers) is kept in view just
+    // under the top bar, down to the last row.
+    function stick() {
+      const table = holder.querySelector('.matrix');
+      if (!table) return;
+      const head = table.tHead;
+      const number = head.querySelector('.col-num');
+      const strip = head.getBoundingClientRect().height - (number.offsetTop - 6);
+      const bar = document.querySelector('.topbar');
+      const under = bar ? bar.getBoundingClientRect().bottom : 0;
+      const hidden = under - (table.getBoundingClientRect().top + head.offsetHeight - strip);
+      const lastRow = table.tBodies[0].lastElementChild;
+      const most = table.offsetHeight - head.offsetHeight - (lastRow ? lastRow.offsetHeight : 0);
+      const shift = Math.max(0, Math.min(hidden, most));
+      table.style.setProperty('--stick', `${Math.round(shift)}px`);
+      table.classList.toggle('stuck', shift > 0);
+    }
+    let frame = null;
+    const onScroll = () => {
+      if (!holder.isConnected) {
+        // The listeners go away with the matrix they belong to.
+        window.removeEventListener('scroll', onScroll);
+        window.removeEventListener('resize', onScroll);
+        return;
+      }
+      if (frame === null) frame = requestAnimationFrame(() => { frame = null; stick(); });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+
     await draw();
     // Real time: the cells follow what the groups do on their boards.
     followProjects(holder, [project.id], draw);
