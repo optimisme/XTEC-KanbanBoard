@@ -250,36 +250,52 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
     // Dragging a task by its handle to another place in the list. It is done
     // with pointer events, not the browser's own drag and drop, so the same
     // code serves a mouse, a pen and a finger on a touch screen.
-    // `drag.from` is the index being dragged; `drag.gap` is where it would
-    // land: the index it would be inserted before (tasks.length is the end).
+    // While a task is carried, the others slide out of its way and a blue
+    // slot shows where it would land.
+    const SIDEWAYS = 0.35; // How much of the sideways movement the row follows.
+    const SIDEWAYS_MAX = 36;
+    const GLIDE_MS = 170;
     let drag = null;
 
-    function showGap() {
-      listEl.querySelectorAll('.drop-before, .drop-after').forEach((el) => el.classList.remove('drop-before', 'drop-after'));
-      // Next to itself the task would not move, so nothing is marked.
-      if (!drag || drag.gap === null || drag.gap === drag.from || drag.gap === drag.from + 1) return;
-      const rows = listEl.querySelectorAll('.task-row');
-      if (drag.gap < rows.length) rows[drag.gap].classList.add('drop-before');
-      else rows[rows.length - 1].classList.add('drop-after');
-    }
-
-    // The row follows the pointer, and the gap is above the first row whose
-    // middle is below it. Positions are page positions taken when the drag
-    // started, so they stay right while the page scrolls under the pointer.
+    // Where everything goes for the current pointer position. Positions are
+    // measured inside the list when the drag starts, so they stay right
+    // while the page scrolls under the pointer.
     function trackDrag() {
-      const pageY = drag.clientY + window.scrollY;
-      drag.row.style.setProperty('transform', `translateY(${pageY - drag.startY}px)`);
-      const below = drag.middles.findIndex((middle) => pageY < middle);
-      const gap = below === -1 ? drag.middles.length : below;
-      if (gap !== drag.gap) {
-        drag.gap = gap;
-        showGap();
-      }
+      const dy = drag.clientY + window.scrollY - drag.startY;
+      const dx = Math.max(-SIDEWAYS_MAX, Math.min(SIDEWAYS_MAX, (drag.clientX - drag.startX) * SIDEWAYS));
+      drag.row.style.setProperty('transform', `translate(${dx}px, ${dy}px)`);
+
+      // A row above gives way when the carried one passes its middle going
+      // up, and a row below when it is passed going down.
+      const centre = drag.boxes[drag.from].middle + dy;
+      let to = drag.from;
+      let slotTop = drag.boxes[drag.from].top;
+      drag.rows.forEach((row, index) => {
+        if (index === drag.from) return;
+        const box = drag.boxes[index];
+        let shift = 0;
+        if (index < drag.from && centre < box.middle) {
+          shift = drag.step;
+          to -= 1;
+          slotTop -= box.height + drag.gap;
+        } else if (index > drag.from && centre > box.middle) {
+          shift = -drag.step;
+          to += 1;
+          slotTop += box.height + drag.gap;
+        }
+        if (box.shift !== shift) {
+          box.shift = shift;
+          row.style.setProperty('transform', `translateY(${shift}px)`);
+        }
+      });
+      drag.to = to;
+      drag.slotTop = slotTop;
+      drag.slot.style.setProperty('top', `${slotTop}px`);
     }
 
     // Near the top or bottom edge of the window the page scrolls by itself.
     function autoScroll() {
-      if (!drag) return;
+      if (!drag || drag.ending) return;
       const edge = 70;
       let step = 0;
       if (drag.clientY < edge) step = -Math.ceil((edge - drag.clientY) / 6);
@@ -294,19 +310,30 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
     function startDrag(event, index, handle) {
       if (drag || (event.pointerType === 'mouse' && event.button !== 0)) return;
       event.preventDefault();
-      const row = handle.closest('.task-row');
+      const rows = [...listEl.querySelectorAll('.task-row')];
+      const row = rows[index];
+      const boxes = rows.map((el) => ({ top: el.offsetTop, height: el.offsetHeight, middle: el.offsetTop + el.offsetHeight / 2, shift: 0 }));
+      const gap = rows.length > 1 ? boxes[1].top - (boxes[0].top + boxes[0].height) : 0;
+      // The blue slot: the place the carried task would take.
+      const slot = h('li', { class: 'drop-slot', 'aria-hidden': 'true' });
+      slot.style.setProperty('top', `${boxes[index].top}px`);
+      slot.style.setProperty('height', `${boxes[index].height}px`);
+      listEl.append(slot);
       drag = {
         from: index,
-        gap: null,
+        to: index,
         row,
-        handle,
+        rows,
+        boxes,
+        gap,
+        step: boxes[index].height + gap,
+        slot,
+        slotTop: boxes[index].top,
         pointerId: event.pointerId,
+        clientX: event.clientX,
         clientY: event.clientY,
+        startX: event.clientX,
         startY: event.clientY + window.scrollY,
-        middles: [...listEl.querySelectorAll('.task-row')].map((el) => {
-          const box = el.getBoundingClientRect();
-          return box.top + window.scrollY + box.height / 2;
-        }),
       };
       // From now on every move of this pointer comes to the handle, wherever
       // the pointer is on the page.
@@ -315,33 +342,47 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       } catch {
         // A pointer the browser no longer knows: the drag simply never moves.
       }
+      listEl.classList.add('sorting');
       row.classList.add('dragging');
       document.body.classList.add('reordering');
       drag.frame = requestAnimationFrame(autoScroll);
     }
 
     function moveDrag(event) {
-      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (!drag || drag.ending || event.pointerId !== drag.pointerId) return;
+      drag.clientX = event.clientX;
       drag.clientY = event.clientY;
       trackDrag();
     }
 
     // `commit` is false when the drag is cancelled (Escape, or the system
-    // taking the pointer away).
+    // taking the pointer away). Either way the carried task glides into the
+    // slot (its new place, or the one it came from) before the list is redrawn.
     async function endDrag(event, commit) {
-      if (!drag || (event && event.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
-      const { from, gap: to, row } = drag;
-      cancelAnimationFrame(drag.frame);
-      drag = null;
-      showGap();
-      row.classList.remove('dragging');
-      row.style.removeProperty('transform');
-      document.body.classList.remove('reordering');
-      if (!commit || to === null || to === from || to === from + 1) return;
+      if (!drag || drag.ending || (event && event.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
+      const ended = drag;
+      ended.ending = true;
+      cancelAnimationFrame(ended.frame);
+      const { from, row, rows, boxes } = ended;
+      const to = commit ? ended.to : from;
+      if (!commit) {
+        rows.forEach((el, index) => index !== from && el.style.setProperty('transform', 'translateY(0px)'));
+        ended.slot.style.setProperty('top', `${boxes[from].top}px`);
+      }
+      row.classList.add('settling');
+      row.style.setProperty('transform', `translate(0px, ${(commit ? ended.slotTop : boxes[from].top) - boxes[from].top}px)`);
+      await new Promise((resolve) => { setTimeout(resolve, GLIDE_MS); });
 
+      drag = null;
+      document.body.classList.remove('reordering');
+      listEl.classList.remove('sorting');
+      if (to === from) {
+        draw();
+        return;
+      }
       const order = tasks.map((t) => t.id);
       const [moved] = order.splice(from, 1);
-      order.splice(to > from ? to - 1 : to, 0, moved);
+      order.splice(to, 0, moved);
       // Shown at once in its new place; the server's answer confirms it.
       const byId = new Map(tasks.map((t) => [t.id, t]));
       const before = tasks;
