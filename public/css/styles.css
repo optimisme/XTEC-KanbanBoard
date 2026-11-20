@@ -386,12 +386,26 @@ td.actions .btn + .btn { margin-left: 6px; }
 .order-controls .btn.icon-only { padding: 0; min-width: 26px; height: 20px; }
 .order-controls .btn.icon-only svg { width: 16px; height: 16px; }
 .drag-handle {
-  width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border-strong);
-  background: var(--surface-muted); cursor: grab; transition: border-color 0.15s, background 0.15s;
+  /* A bigger target than the circle that is drawn, for fingers. */
+  display: grid; place-items: center; width: 32px; height: 28px; cursor: grab;
+  /* The drag is ours: the browser must not scroll or select text instead. */
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
-.drag-handle:hover { border-color: var(--in_progress); background: #e8eefb; }
-.drag-handle:active { cursor: grabbing; }
-.task-row.dragging { opacity: 0.4; }
+.drag-handle::before {
+  content: ''; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border-strong);
+  background: var(--surface-muted); transition: border-color 0.15s, background 0.15s;
+}
+.drag-handle:hover::before, .task-row.dragging .drag-handle::before { border-color: var(--in_progress); background: #e8eefb; }
+/* The row being dragged follows the pointer above the others. */
+.task-row.dragging { z-index: 5; box-shadow: var(--shadow-lg); opacity: 0.92; cursor: grabbing; }
+body.reordering { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+/* On touch screens the arrows are easier to hit. */
+@media (pointer: coarse) {
+  .order-controls { gap: 4px; }
+  .order-controls .btn.icon-only { min-width: 36px; height: 30px; }
+  .order-controls .btn.icon-only svg { width: 20px; height: 20px; }
+  .drag-handle { width: 36px; height: 32px; }
+}
 /* Where the dragged task would land. */
 .task-row.drop-before::before, .task-row.drop-after::after {
   content: ''; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--in_progress);

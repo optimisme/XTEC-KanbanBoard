@@ -72,7 +72,8 @@ Les tasques es defineixen una vegada per a tot el projecte, amb una descripció
 en Markdown i etiquetes de colors. L'ordre de la llista és la prioritat: no hi
 ha nivells de prioritat a part. Per canviar-lo, s'arrossega la tasca pel
 cercle que té a l'esquerra fins a la nova posició, o es fan servir les fletxes
-de sobre i de sota del cercle. També es poden importar d'un fitxer Markdown.
+de sobre i de sota del cercle; funciona igual amb el ratolí i amb el dit en
+pantalles tàctils. També es poden importar d'un fitxer Markdown.
 
 ![Llista de tasques del projecte amb les seves etiquetes](assets/04-tasques.png)
 

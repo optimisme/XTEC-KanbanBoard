@@ -247,41 +247,98 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       });
     }
 
-    // Dragging a task by its handle to another place in the list. `dragging`
-    // is the index being dragged; `gap` is where it would land: the index it
-    // would be inserted before (tasks.length means the very end).
-    let dragging = null;
-    let gap = null;
+    // Dragging a task by its handle to another place in the list. It is done
+    // with pointer events, not the browser's own drag and drop, so the same
+    // code serves a mouse, a pen and a finger on a touch screen.
+    // `drag.from` is the index being dragged; `drag.gap` is where it would
+    // land: the index it would be inserted before (tasks.length is the end).
+    let drag = null;
+
     function showGap() {
       listEl.querySelectorAll('.drop-before, .drop-after').forEach((el) => el.classList.remove('drop-before', 'drop-after'));
       // Next to itself the task would not move, so nothing is marked.
-      if (gap === null || gap === dragging || gap === dragging + 1) return;
+      if (!drag || drag.gap === null || drag.gap === drag.from || drag.gap === drag.from + 1) return;
       const rows = listEl.querySelectorAll('.task-row');
-      if (gap < rows.length) rows[gap].classList.add('drop-before');
+      if (drag.gap < rows.length) rows[drag.gap].classList.add('drop-before');
       else rows[rows.length - 1].classList.add('drop-after');
     }
-    listEl.addEventListener('dragover', (event) => {
-      if (dragging === null) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      const rows = [...listEl.querySelectorAll('.task-row')];
-      // The gap is above the first row whose middle is below the pointer.
-      const below = rows.findIndex((row) => {
-        const box = row.getBoundingClientRect();
-        return event.clientY < box.top + box.height / 2;
-      });
-      const next = below === -1 ? rows.length : below;
-      if (next !== gap) {
-        gap = next;
+
+    // The row follows the pointer, and the gap is above the first row whose
+    // middle is below it. Positions are page positions taken when the drag
+    // started, so they stay right while the page scrolls under the pointer.
+    function trackDrag() {
+      const pageY = drag.clientY + window.scrollY;
+      drag.row.style.setProperty('transform', `translateY(${pageY - drag.startY}px)`);
+      const below = drag.middles.findIndex((middle) => pageY < middle);
+      const gap = below === -1 ? drag.middles.length : below;
+      if (gap !== drag.gap) {
+        drag.gap = gap;
         showGap();
       }
-    });
-    listEl.addEventListener('drop', async (event) => {
-      if (dragging === null) return;
+    }
+
+    // Near the top or bottom edge of the window the page scrolls by itself.
+    function autoScroll() {
+      if (!drag) return;
+      const edge = 70;
+      let step = 0;
+      if (drag.clientY < edge) step = -Math.ceil((edge - drag.clientY) / 6);
+      else if (drag.clientY > window.innerHeight - edge) step = Math.ceil((drag.clientY - (window.innerHeight - edge)) / 6);
+      if (step) {
+        window.scrollBy(0, step);
+        trackDrag();
+      }
+      drag.frame = requestAnimationFrame(autoScroll);
+    }
+
+    function startDrag(event, index, handle) {
+      if (drag || (event.pointerType === 'mouse' && event.button !== 0)) return;
       event.preventDefault();
-      const from = dragging;
-      const to = gap;
-      if (to === null || to === from || to === from + 1) return;
+      const row = handle.closest('.task-row');
+      drag = {
+        from: index,
+        gap: null,
+        row,
+        handle,
+        pointerId: event.pointerId,
+        clientY: event.clientY,
+        startY: event.clientY + window.scrollY,
+        middles: [...listEl.querySelectorAll('.task-row')].map((el) => {
+          const box = el.getBoundingClientRect();
+          return box.top + window.scrollY + box.height / 2;
+        }),
+      };
+      // From now on every move of this pointer comes to the handle, wherever
+      // the pointer is on the page.
+      try {
+        handle.setPointerCapture(event.pointerId);
+      } catch {
+        // A pointer the browser no longer knows: the drag simply never moves.
+      }
+      row.classList.add('dragging');
+      document.body.classList.add('reordering');
+      drag.frame = requestAnimationFrame(autoScroll);
+    }
+
+    function moveDrag(event) {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      drag.clientY = event.clientY;
+      trackDrag();
+    }
+
+    // `commit` is false when the drag is cancelled (Escape, or the system
+    // taking the pointer away).
+    async function endDrag(event, commit) {
+      if (!drag || (event && event.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
+      const { from, gap: to, row } = drag;
+      cancelAnimationFrame(drag.frame);
+      drag = null;
+      showGap();
+      row.classList.remove('dragging');
+      row.style.removeProperty('transform');
+      document.body.classList.remove('reordering');
+      if (!commit || to === null || to === from || to === from + 1) return;
+
       const order = tasks.map((t) => t.id);
       const [moved] = order.splice(from, 1);
       order.splice(to > from ? to - 1 : to, 0, moved);
@@ -297,7 +354,13 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         showError(err);
       }
       draw();
-    });
+    }
+    const cancelOnEscape = (event) => {
+      // The listener goes away with the list it belongs to.
+      if (!listEl.isConnected) document.removeEventListener('keydown', cancelOnEscape);
+      else if (event.key === 'Escape' && drag) endDrag(null, false);
+    };
+    document.addEventListener('keydown', cancelOnEscape);
 
     function draw() {
       append(clear(toolbar), 
@@ -320,24 +383,11 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         up.addEventListener('click', () => moveTask(index, -1, up));
         down.addEventListener('click', () => moveTask(index, 1, down));
         // Between the arrows, the handle the task is dragged by.
-        const handle = h('span', { class: 'drag-handle', draggable: 'true', title: 'Arrossega per canviar la posició', 'aria-hidden': 'true' });
-        handle.addEventListener('dragstart', (event) => {
-          dragging = index;
-          gap = null;
-          const row = handle.closest('.task-row');
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/plain', String(task.id));
-          const box = row.getBoundingClientRect();
-          event.dataTransfer.setDragImage(row, event.clientX - box.left, event.clientY - box.top);
-          // After the browser has taken the picture of the row.
-          setTimeout(() => row.classList.add('dragging'), 0);
-        });
-        handle.addEventListener('dragend', () => {
-          dragging = null;
-          gap = null;
-          showGap();
-          listEl.querySelectorAll('.dragging').forEach((el) => el.classList.remove('dragging'));
-        });
+        const handle = h('span', { class: 'drag-handle', title: 'Arrossega per canviar la posició', 'aria-hidden': 'true' });
+        handle.addEventListener('pointerdown', (event) => startDrag(event, index, handle));
+        handle.addEventListener('pointermove', moveDrag);
+        handle.addEventListener('pointerup', (event) => endDrag(event, true));
+        handle.addEventListener('pointercancel', (event) => endDrag(event, false));
         const remove = h('button', { class: 'btn ghost small danger', type: 'button' }, 'Elimina');
         remove.addEventListener('click', async () => {
           const ok = await confirmDialog({
