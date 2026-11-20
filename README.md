@@ -88,7 +88,10 @@ A més del número, un grup pot tenir un nom curt opcional.
 
 ### Tauler del grup
 
-L'alumnat mou les tasques entre les columnes. Qui comença una tasca sense
+L'alumnat mou les tasques entre les columnes arrossegant les targetes: amb el
+ratolí n'hi ha prou d'estirar-les, i en pantalles tàctils cal mantenir-hi el dit
+un moment fins que la targeta s'aixeca (també hi ha la llista «Mou a…» de cada
+targeta). Qui comença una tasca sense
 responsable en queda com a responsable automàticament. Una tasca bloquejada
 mostra el motiu a la mateixa targeta. Cada targeta porta, a la cantonada de
 dalt a la dreta, el número de la tasca dins del projecte (el mateix de la

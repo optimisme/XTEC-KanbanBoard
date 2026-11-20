@@ -18,6 +18,9 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
   let people = [];
   const remoteDrags = new Map(); // user id -> { user, task_id, status, timer }
   let dragTarget = null;
+  // The task just dropped in a new column: its card settles when it is drawn there.
+  let landed = null;
+  let everShown = false;
   let dragBeat = null;
   // Teachers and administrators see the board read-only until they switch
   // editing on, so a group's work is never changed by a stray click or drag.
@@ -120,6 +123,183 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
       .finally(() => { opening = false; });
   }
 
+  // ---- Dragging a card to another column ------------------------------------------
+  // Done with pointer events, so the same code serves a mouse, a pen and a
+  // finger. With a mouse the drag starts as soon as the card is pulled; on a
+  // touch screen it starts after a long press, so that a plain swipe still
+  // scrolls the board. The card lifts (a little bigger, a deeper shadow) to
+  // show it is being carried, and a dimmed copy stays in the place it left.
+  const LONG_PRESS_MS = 350;
+  const PULL_PX = 5; // Mouse: how far the card is pulled before it lifts.
+  const SLOP_PX = 10; // Touch: moving this far before the long press is a scroll.
+  let drag = null; // { task, el, ghost, pointerId, x, y, startX, startY, originX, originY, frame }
+
+  const allowedHere = (status) => drag.task.status !== status && drag.task.allowed_transitions.includes(status);
+  const columnAt = (x, y) => [...boardEl.querySelectorAll('.column')].find((col) => {
+    const box = col.getBoundingClientRect();
+    return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+  });
+
+  function trackDrag() {
+    drag.el.style.setProperty('transform', `translate(${drag.x - drag.startX}px, ${drag.y - drag.startY}px)`);
+    const over = columnAt(drag.x, drag.y);
+    const status = over && allowedHere(over.dataset.status) ? over.dataset.status : null;
+    if (status === dragTarget) return;
+    boardEl.querySelectorAll('.drop-ok').forEach((col) => col.classList.remove('drop-ok'));
+    if (status) over.classList.add('drop-ok');
+    announceDrag(status);
+  }
+
+  // Near an edge the board (sideways) and the page (up and down) scroll by themselves.
+  function autoScroll() {
+    if (!drag) return;
+    const edge = 60;
+    const speed = (distance) => Math.ceil(distance / 5);
+    const box = boardEl.getBoundingClientRect();
+    if (drag.x < Math.max(box.left, 0) + edge) boardEl.scrollLeft -= speed(Math.max(box.left, 0) + edge - drag.x);
+    else if (drag.x > Math.min(box.right, window.innerWidth) - edge) boardEl.scrollLeft += speed(drag.x - (Math.min(box.right, window.innerWidth) - edge));
+    if (drag.y < edge) window.scrollBy(0, -speed(edge - drag.y));
+    else if (drag.y > window.innerHeight - edge) window.scrollBy(0, speed(drag.y - (window.innerHeight - edge)));
+    trackDrag();
+    drag.frame = requestAnimationFrame(autoScroll);
+  }
+
+  function lift(el, task, event) {
+    const box = el.getBoundingClientRect();
+    // The copy keeps the card's place in the column while the card itself
+    // is carried above everything else.
+    const ghost = el.cloneNode(true);
+    ghost.classList.add('drag-ghost');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.removeAttribute('data-task');
+    el.before(ghost);
+    for (const [prop, value] of Object.entries({ left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` })) {
+      el.style.setProperty(prop, value);
+    }
+    el.classList.add('lifted');
+    document.body.classList.add('reordering');
+    dragged = task;
+    drag = { task, el, ghost, pointerId: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY };
+    try {
+      el.setPointerCapture(event.pointerId);
+    } catch {
+      // A pointer the browser no longer knows: the drag simply never moves.
+    }
+    boardEl.querySelectorAll('.column').forEach((col) => allowedHere(col.dataset.status) && col.classList.add('drop-allowed'));
+    announceDrag(null);
+    // Repeated while the drag lasts, so a lost "it ended" cannot leave the
+    // card marked on the other screens for ever.
+    dragBeat = setInterval(() => announceDrag(dragTarget), 5000);
+    drag.frame = requestAnimationFrame(autoScroll);
+  }
+
+  // Ends the drag. With a column to drop on, the task moves there; without
+  // one (cancelled, or dropped where it cannot go) the card glides back.
+  function drop(commit) {
+    if (!drag) return;
+    const { task, el, ghost } = drag;
+    const target = commit ? dragTarget : null;
+    cancelAnimationFrame(drag.frame);
+    clearInterval(dragBeat);
+    if (channel) channel.send({ type: 'drag_end' });
+    drag = null;
+    dragged = null;
+    dragTarget = null;
+    document.body.classList.remove('reordering');
+    boardEl.querySelectorAll('.drop-ok, .drop-allowed').forEach((col) => col.classList.remove('drop-ok', 'drop-allowed'));
+    // The click that ends a drag must not open the task.
+    const swallow = (event) => { event.stopPropagation(); event.preventDefault(); };
+    window.addEventListener('click', swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 50);
+
+    const settle = () => {
+      ghost.remove();
+      el.classList.remove('lifted', 'returning');
+      for (const prop of ['left', 'top', 'width', 'height', 'transform']) el.style.removeProperty(prop);
+    };
+    if (target) {
+      settle();
+      landed = task.id;
+      move(task, target);
+    } else {
+      el.classList.add('returning');
+      el.style.setProperty('transform', 'translate(0px, 0px)');
+      setTimeout(() => {
+        settle();
+        resumeRemote();
+      }, 170);
+    }
+  }
+
+  // A press that may still become a drag: { el, task, pointerId, x, y, touch, timer }
+  let pending = null;
+  const forget = () => {
+    if (pending) clearTimeout(pending.timer);
+    pending = null;
+  };
+  const liftPending = () => {
+    const start = pending;
+    forget();
+    if (start.el.isConnected) lift(start.el, start.task, { pointerId: start.pointerId, clientX: start.x, clientY: start.y });
+  };
+
+  function enableDrag(el, task) {
+    el.addEventListener('pointerdown', (event) => {
+      if (drag || pending || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      // The "Mou a…" list keeps working as a list.
+      if (event.target.closest('select, a')) return;
+      pending = { el, task, pointerId: event.pointerId, x: event.clientX, y: event.clientY, touch: event.pointerType !== 'mouse', timer: null };
+      if (pending.touch) {
+        pending.timer = setTimeout(() => {
+          if (navigator.vibrate) navigator.vibrate(15);
+          liftPending();
+        }, LONG_PRESS_MS);
+      }
+    });
+    // While a card is carried by a finger the page must not scroll under it,
+    // and a long press must not open the system menu.
+    el.addEventListener('touchmove', (event) => { if (drag && drag.el === el && event.cancelable) event.preventDefault(); }, { passive: false });
+    el.addEventListener('contextmenu', (event) => { if ((pending && pending.el === el) || (drag && drag.el === el)) event.preventDefault(); });
+  }
+
+  // The rest of the gesture is followed on the whole page: a quick pull takes
+  // the pointer off the card before it has lifted.
+  const onPointerMove = (event) => {
+    if (drag && event.pointerId === drag.pointerId) {
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      trackDrag();
+      return;
+    }
+    if (!pending || event.pointerId !== pending.pointerId) return;
+    const moved = Math.hypot(event.clientX - pending.x, event.clientY - pending.y);
+    if (pending.touch) {
+      // A swipe: the browser scrolls, and this press is not a drag.
+      if (moved > SLOP_PX) forget();
+    } else if (moved > PULL_PX) {
+      liftPending();
+      if (!drag) return;
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      trackDrag();
+    }
+  };
+  const onPointerEnd = (event) => {
+    if (pending && event.pointerId === pending.pointerId) forget();
+    if (drag && event.pointerId === drag.pointerId) drop(event.type === 'pointerup');
+  };
+  const cancelOnEscape = (event) => {
+    if (event.key === 'Escape' && drag) drop(false);
+  };
+  const pageListeners = [['pointermove', onPointerMove], ['pointerup', onPointerEnd], ['pointercancel', onPointerEnd], ['keydown', cancelOnEscape]];
+  for (const [type, listener] of pageListeners) document.addEventListener(type, listener);
+  // The listeners go away with the board they belong to.
+  const tidy = setInterval(() => {
+    if (boardEl.isConnected || drag || !everShown) return;
+    clearInterval(tidy);
+    for (const [type, listener] of pageListeners) document.removeEventListener(type, listener);
+  }, 5000);
+
   function card(task) {
     const canMove = canEdit() && task.allowed_transitions.length > 0;
     const moveSelect = canMove
@@ -129,7 +309,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
       : null;
     if (moveSelect) moveSelect.addEventListener('change', () => moveSelect.value && move(task, moveSelect.value, moveSelect));
 
-    const el = h('article', { class: `task-card ${task.status}`, 'data-task': String(task.id), draggable: canMove ? 'true' : null },
+    const el = h('article', { class: `task-card ${task.status}${canMove ? ' can-drag' : ''}`, 'data-task': String(task.id) },
       h('div', { class: 'task-head' },
         h('button', { class: 'task-title', type: 'button', onClick: () => openTask(task.id) }, task.title),
         // The task's number in the project's order, as in the list and the matrix.
@@ -160,27 +340,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
         : null,
       moveSelect ? h('div', { class: 'task-move' }, moveSelect) : null);
 
-    if (canMove) {
-      el.addEventListener('dragstart', (event) => {
-        dragged = task;
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', String(task.id));
-        el.classList.add('dragging');
-        announceDrag(null);
-        // Repeated while the drag lasts, so a lost "it ended" cannot leave
-        // the card marked on the other screens for ever.
-        dragBeat = setInterval(() => announceDrag(dragTarget), 5000);
-      });
-      el.addEventListener('dragend', () => {
-        dragged = null;
-        dragTarget = null;
-        clearInterval(dragBeat);
-        if (channel) channel.send({ type: 'drag_end' });
-        el.classList.remove('dragging');
-        boardEl.querySelectorAll('.drop-ok').forEach((c) => c.classList.remove('drop-ok'));
-        resumeRemote();
-      });
-    }
+    if (canMove) enableDrag(el, task);
     return el;
   }
 
@@ -197,24 +357,6 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
         h('span', { class: 'count', 'aria-label': `${tasks.length} tasques` }, String(tasks.length))),
       tasks.length ? tasks.map(card) : h('div', { class: 'column-empty' }, 'Cap tasca'));
 
-    const accepts = () => dragged && dragged.status !== status && dragged.allowed_transitions.includes(status);
-    el.addEventListener('dragover', (event) => {
-      if (!accepts()) return;
-      event.preventDefault();
-      el.classList.add('drop-ok');
-      if (dragTarget !== status) announceDrag(status);
-    });
-    el.addEventListener('dragleave', (event) => {
-      if (el.contains(event.relatedTarget)) return;
-      el.classList.remove('drop-ok');
-      if (dragTarget === status) announceDrag(null);
-    });
-    el.addEventListener('drop', (event) => {
-      if (!accepts()) return;
-      event.preventDefault();
-      el.classList.remove('drop-ok');
-      move(dragged, status);
-    });
     return el;
   }
 
@@ -274,6 +416,11 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
       peopleEl
     );
     append(clear(boardEl), STATUSES.map(column));
+    if (landed !== null) {
+      const cardEl = boardEl.querySelector(`.task-card[data-task="${landed}"]`);
+      if (cardEl) cardEl.classList.add('landing');
+      landed = null;
+    }
     paintRemote();
   }
 
@@ -338,6 +485,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
     onDenied: rerender,
   };
   setTimeout(() => {
+    everShown = true;
     if (boardEl.isConnected) channel = openBoardChannel(Number(groupId), handlers);
   }, 0);
 
