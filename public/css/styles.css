@@ -455,7 +455,12 @@ body.reordering { cursor: grabbing; user-select: none; -webkit-user-select: none
    against the page, so the script of the matrix sets --stick to how far the
    header has to be pushed down. */
 .matrix thead th { position: relative; z-index: 2; transform: translateY(var(--stick, 0px)); vertical-align: bottom; min-width: 46px; max-width: 46px; text-align: center; }
-.matrix.stuck thead th { box-shadow: 0 3px 6px rgba(16, 24, 40, 0.14); }
+/* While stuck, a shadow under the strip only: a fading band below each cell,
+   with nothing at the sides or above (a blurred box shadow spreads all round). */
+.matrix.stuck thead th::after {
+  content: ''; position: absolute; left: 0; right: -1px; top: calc(100% + 1px); height: 6px;
+  background: linear-gradient(rgba(16, 24, 40, 0.16), rgba(16, 24, 40, 0)); pointer-events: none;
+}
 .matrix thead th .col-title {
   /* inline-block, so the header's centring also applies to the rotated title */
   display: inline-block; vertical-align: bottom;
