@@ -349,3 +349,16 @@ test('removing a student from a group keeps history and clears responsibility', 
   assert.equal((await s.admin.del(`/api/groups/${s.group0.id}`)).status, 409);
   assert.equal((await s.admin.del(`/api/groups/${s.group1.id}`)).status, 200);
 });
+
+test('board cards carry their number in the project order, whatever their state', async () => {
+  const board = (await student2.get(`/api/groups/${s.group0.id}/board`)).body;
+  assert.deepEqual(board.tasks.map((t) => t.position), board.tasks.map((t, index) => index + 1));
+  // The number follows the project's order, not the column the card is in.
+  const order = [...s.tasks].reverse().map((t) => t.id);
+  const all = (await teacher.get(`/api/projects/${s.project.id}/tasks`)).body.map((t) => t.id);
+  const reordered = [...order, ...all.filter((id) => !order.includes(id))];
+  assert.equal((await teacher.put(`/api/projects/${s.project.id}/tasks/order`, { task_ids: reordered })).status, 200);
+  const after = (await student2.get(`/api/groups/${s.group0.id}/board`)).body;
+  assert.equal(after.tasks.find((t) => t.task_id === s.tasks[2].id).position, 1);
+  assert.equal(after.tasks.find((t) => t.task_id === s.tasks[0].id).position, 3);
+});

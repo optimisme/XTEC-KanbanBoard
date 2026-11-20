@@ -130,7 +130,11 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
     if (moveSelect) moveSelect.addEventListener('change', () => moveSelect.value && move(task, moveSelect.value, moveSelect));
 
     const el = h('article', { class: `task-card ${task.status}`, 'data-task': String(task.id), draggable: canMove ? 'true' : null },
-      h('button', { class: 'task-title', type: 'button', onClick: () => openTask(task.id) }, task.title),
+      h('div', { class: 'task-head' },
+        h('button', { class: 'task-title', type: 'button', onClick: () => openTask(task.id) }, task.title),
+        // The task's number in the project's order, as in the list and the matrix.
+        h('span', { class: 'task-number', title: `Tasca número ${task.position}` },
+          h('span', { class: 'sr-only' }, 'Tasca número '), String(task.position))),
       tagChips(task.tags),
       task.status === 'blocked' && task.block_reason
         ? h('div', { class: 'block-reason', title: task.block_reason }, icon('blocked'),

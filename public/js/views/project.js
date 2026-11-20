@@ -247,11 +247,63 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
       });
     }
 
+    // Dragging a task by its handle to another place in the list. `dragging`
+    // is the index being dragged; `gap` is where it would land: the index it
+    // would be inserted before (tasks.length means the very end).
+    let dragging = null;
+    let gap = null;
+    function showGap() {
+      listEl.querySelectorAll('.drop-before, .drop-after').forEach((el) => el.classList.remove('drop-before', 'drop-after'));
+      // Next to itself the task would not move, so nothing is marked.
+      if (gap === null || gap === dragging || gap === dragging + 1) return;
+      const rows = listEl.querySelectorAll('.task-row');
+      if (gap < rows.length) rows[gap].classList.add('drop-before');
+      else rows[rows.length - 1].classList.add('drop-after');
+    }
+    listEl.addEventListener('dragover', (event) => {
+      if (dragging === null) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const rows = [...listEl.querySelectorAll('.task-row')];
+      // The gap is above the first row whose middle is below the pointer.
+      const below = rows.findIndex((row) => {
+        const box = row.getBoundingClientRect();
+        return event.clientY < box.top + box.height / 2;
+      });
+      const next = below === -1 ? rows.length : below;
+      if (next !== gap) {
+        gap = next;
+        showGap();
+      }
+    });
+    listEl.addEventListener('drop', async (event) => {
+      if (dragging === null) return;
+      event.preventDefault();
+      const from = dragging;
+      const to = gap;
+      if (to === null || to === from || to === from + 1) return;
+      const order = tasks.map((t) => t.id);
+      const [moved] = order.splice(from, 1);
+      order.splice(to > from ? to - 1 : to, 0, moved);
+      // Shown at once in its new place; the server's answer confirms it.
+      const byId = new Map(tasks.map((t) => [t.id, t]));
+      const before = tasks;
+      tasks = order.map((id) => byId.get(id));
+      draw();
+      try {
+        tasks = await api.put(`/api/projects/${project.id}/tasks/order`, { task_ids: order });
+      } catch (err) {
+        tasks = before;
+        showError(err);
+      }
+      draw();
+    });
+
     function draw() {
       append(clear(toolbar), 
         // The hint stays on the left; the actions sit at the right end of the row.
         h('span', { class: 'muted grow' }, project.can_manage
-          ? "L'ordre de la llista és l'ordre global de les tasques per a tots els grups."
+          ? "L'ordre de la llista és l'ordre global de les tasques per a tots els grups. Arrossega el cercle o fes servir les fletxes per canviar-lo."
           : "Les tasques es mostren en l'ordre global definit pel professorat."),
         project.can_manage && writable
           ? h('button', { class: 'btn primary', type: 'button', onClick: () => openTaskEditor({ projectId: project.id, onSaved: refresh }).catch(showError) }, 'Nova tasca')
@@ -267,6 +319,25 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         const down = h('button', { class: 'btn ghost icon-only', type: 'button', 'aria-label': `Baixa «${task.title}»`, disabled: index === tasks.length - 1 }, icon('down'));
         up.addEventListener('click', () => moveTask(index, -1, up));
         down.addEventListener('click', () => moveTask(index, 1, down));
+        // Between the arrows, the handle the task is dragged by.
+        const handle = h('span', { class: 'drag-handle', draggable: 'true', title: 'Arrossega per canviar la posició', 'aria-hidden': 'true' });
+        handle.addEventListener('dragstart', (event) => {
+          dragging = index;
+          gap = null;
+          const row = handle.closest('.task-row');
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', String(task.id));
+          const box = row.getBoundingClientRect();
+          event.dataTransfer.setDragImage(row, event.clientX - box.left, event.clientY - box.top);
+          // After the browser has taken the picture of the row.
+          setTimeout(() => row.classList.add('dragging'), 0);
+        });
+        handle.addEventListener('dragend', () => {
+          dragging = null;
+          gap = null;
+          showGap();
+          listEl.querySelectorAll('.dragging').forEach((el) => el.classList.remove('dragging'));
+        });
         const remove = h('button', { class: 'btn ghost small danger', type: 'button' }, 'Elimina');
         remove.addEventListener('click', async () => {
           const ok = await confirmDialog({
@@ -278,6 +349,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         });
 
         return h('li', { class: 'task-row' },
+          project.can_manage && writable ? h('div', { class: 'order-controls' }, up, handle, down) : null,
           h('span', { class: 'position', 'aria-label': `Posició ${index + 1}` }, String(index + 1)),
           h('div', { class: 'body' },
             h('button', {
@@ -290,7 +362,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
               ).catch(showError),
             }, task.title),
             tagChips(task.tags)),
-          project.can_manage && writable ? h('div', { class: 'row-actions' }, up, down, remove) : null);
+          project.can_manage && writable ? h('div', { class: 'row-actions' }, remove) : null);
       }));
       if (tasks.length === 0) append(listEl, h('li', { class: 'empty' }, 'Aquest projecte encara no té tasques.'));
     }

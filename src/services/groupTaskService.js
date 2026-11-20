@@ -82,7 +82,12 @@ export async function board(user, groupId) {
     access: access.level,
     can_manage: access.canManage,
     members,
-    tasks: rows.map((row) => presentCard(row, tags.get(row.task_id), collaborators.get(row.id), access, user)),
+    // `position` is the task's number in the project's global order, the same
+    // one the task list and the matrix show.
+    tasks: rows.map((row, index) => ({
+      ...presentCard(row, tags.get(row.task_id), collaborators.get(row.id), access, user),
+      position: index + 1,
+    })),
   };
 }
 

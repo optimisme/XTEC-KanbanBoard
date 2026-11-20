@@ -70,7 +70,9 @@ per etiqueta.
 
 Les tasques es defineixen una vegada per a tot el projecte, amb una descripció
 en Markdown i etiquetes de colors. L'ordre de la llista és la prioritat: no hi
-ha nivells de prioritat a part. També es poden importar d'un fitxer Markdown.
+ha nivells de prioritat a part. Per canviar-lo, s'arrossega la tasca pel
+cercle que té a l'esquerra fins a la nova posició, o es fan servir les fletxes
+de sobre i de sota del cercle. També es poden importar d'un fitxer Markdown.
 
 ![Llista de tasques del projecte amb les seves etiquetes](assets/04-tasques.png)
 
@@ -87,7 +89,9 @@ A més del número, un grup pot tenir un nom curt opcional.
 
 L'alumnat mou les tasques entre les columnes. Qui comença una tasca sense
 responsable en queda com a responsable automàticament. Una tasca bloquejada
-mostra el motiu a la mateixa targeta. Des del tauler, el grup configura el seu
+mostra el motiu a la mateixa targeta. Cada targeta porta, a la cantonada de
+dalt a la dreta, el número de la tasca dins del projecte (el mateix de la
+llista de tasques i de la matriu), també quan ja és a «Finalitzat». Des del tauler, el grup configura el seu
 repositori de GitHub i l'adreça de la seva web.
 
 El tauler s'actualitza sol, en temps real: quan algú mou una tasca, la resta

@@ -331,6 +331,14 @@ td.actions .btn + .btn { margin-left: 6px; }
 .board-people, .person-here { display: inline-flex; align-items: center; gap: 6px; }
 .board-people { flex-wrap: wrap; gap: 6px 12px; }
 .task-card:hover { box-shadow: var(--shadow); }
+/* Title and, at the top right corner, the task's number in the project. */
+.task-head { display: flex; align-items: flex-start; gap: 8px; }
+.task-head .task-title { flex: 1; min-width: 0; width: auto; }
+.task-number {
+  flex: none; min-width: 22px; padding: 0 6px; border-radius: 999px; text-align: center;
+  font-size: 0.75rem; font-weight: 600; line-height: 1.5; font-variant-numeric: tabular-nums;
+  color: var(--text-muted); background: var(--surface-muted); border: 1px solid var(--border);
+}
 .task-title {
   display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left;
   font: inherit; font-weight: 600; color: var(--text); cursor: pointer; margin-bottom: 6px;
@@ -372,6 +380,24 @@ td.actions .btn + .btn { margin-left: 6px; }
 .task-row .body { flex: 1; min-width: 0; }
 .task-row .body .task-title { margin-bottom: 4px; }
 .task-row .row-actions { display: flex; gap: 4px; flex: none; }
+/* Order controls at the left of a task: up arrow, drag handle, down arrow. */
+.task-row { position: relative; }
+.order-controls { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
+.order-controls .btn.icon-only { padding: 0; min-width: 26px; height: 20px; }
+.order-controls .btn.icon-only svg { width: 16px; height: 16px; }
+.drag-handle {
+  width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border-strong);
+  background: var(--surface-muted); cursor: grab; transition: border-color 0.15s, background 0.15s;
+}
+.drag-handle:hover { border-color: var(--in_progress); background: #e8eefb; }
+.drag-handle:active { cursor: grabbing; }
+.task-row.dragging { opacity: 0.4; }
+/* Where the dragged task would land. */
+.task-row.drop-before::before, .task-row.drop-after::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--in_progress);
+}
+.task-row.drop-before::before { top: -5px; }
+.task-row.drop-after::after { bottom: -5px; }
 
 /* ---- Matrix ------------------------------------------------------------ */
 
