@@ -142,8 +142,8 @@ La marca vertical de cada barra és la mitjana de la classe, perquè cada grup
 sàpiga si va avançat o endarrerit.
 
 El professorat la veu sempre, a la pestanya «Insígnies» del projecte.
-L'alumnat només la veu si s'activa «Mostra les insígnies a l'alumnat» a «Edita
-el projecte» (per defecte està desactivat); aleshores té un botó «Insígnies»
+L'alumnat només la veu si està activat «Mostra les insígnies a l'alumnat» a
+«Edita el projecte» (els projectes nous el tenen activat); aleshores té un botó «Insígnies»
 al seu tauler i veu el nom i el progrés dels altres grups, però no qui en
 forma part. Les insígnies es calculen a partir de qui marca cada tasca com a
 finalitzada: mostren com es registra la feina, no en mesuren la qualitat.

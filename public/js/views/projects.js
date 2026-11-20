@@ -37,7 +37,8 @@ export async function openProjectForm({ project = null, onSaved }) {
   // A new project starts hidden, so students do not see it half prepared.
   let hidden = project ? project.hidden : true;
   const hide = toggleSwitch("Oculta el projecte a l'alumnat", hidden, (on) => { hidden = on; });
-  let rankingVisible = project ? project.ranking_visible : false;
+  // The badges page is on for a new project; it can be switched off here.
+  let rankingVisible = project ? project.ranking_visible : true;
   const ranking = toggleSwitch("Mostra les insígnies a l'alumnat", rankingVisible, (on) => { rankingVisible = on; });
   const save = h('button', { class: 'btn primary', type: 'submit' }, project ? 'Desa els canvis' : 'Crea el projecte');
 
