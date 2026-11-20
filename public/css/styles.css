@@ -325,6 +325,8 @@ td.actions .btn + .btn { margin-left: 6px; }
 .task-card.can-drag { cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 /* Being carried: a little bigger and with a deeper shadow, above everything. */
 .task-card.lifted { position: fixed; z-index: 1000; margin: 0; scale: 1.05; box-shadow: var(--shadow-lg); cursor: grabbing; }
+/* Pressed with the mouse, about to be carried: it lifts where it is. */
+.task-card.pressed { position: relative; z-index: 2; scale: 1.05; box-shadow: var(--shadow-lg); cursor: grabbing; }
 /* Gliding back to its place after a cancelled drag. */
 .task-card.lifted.returning { scale: 1; box-shadow: var(--shadow-sm); transition: transform 0.16s ease, scale 0.16s ease, box-shadow 0.16s ease; }
 /* The dimmed copy that keeps the card's place while it is carried. */

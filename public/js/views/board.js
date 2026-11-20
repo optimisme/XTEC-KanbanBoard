@@ -234,7 +234,10 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
   // A press that may still become a drag: { el, task, pointerId, x, y, touch, timer }
   let pending = null;
   const forget = () => {
-    if (pending) clearTimeout(pending.timer);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pending.el.classList.remove('pressed');
+    }
     pending = null;
   };
   const liftPending = () => {
@@ -249,6 +252,10 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
       // The "Mou a…" list keeps working as a list.
       if (event.target.closest('select, a')) return;
       pending = { el, task, pointerId: event.pointerId, x: event.clientX, y: event.clientY, touch: event.pointerType !== 'mouse', timer: null };
+      // With a mouse the card lifts as soon as it is pressed, before it moves,
+      // like the handle of the task list. A finger has to wait for the long
+      // press: lifting at once would make every scroll flash the cards.
+      if (!pending.touch) el.classList.add('pressed');
       if (pending.touch) {
         pending.timer = setTimeout(() => {
           if (navigator.vibrate) navigator.vibrate(15);
