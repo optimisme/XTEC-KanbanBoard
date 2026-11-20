@@ -103,7 +103,7 @@ les insígnies, la llista de tasques bloquejades i el detall d'una tasca
 oberta, que es torna a carregar sense perdre el comentari que s'hi estigui
 escrivint.
 
-![Tauler Kanban d'un grup](assets/06-tauler.png)
+![Tauler Kanban d'un grup: a dalt es veu qui més hi ha al tauler, i la primera targeta de «Pendent» està marcada perquè una companya l'arrossega cap a «En curs»](assets/06-tauler.png)
 
 ### Detall d'una tasca
 
