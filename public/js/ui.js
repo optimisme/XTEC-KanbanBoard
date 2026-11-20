@@ -110,10 +110,11 @@ export function readableTextColor(hex) {
 const NEW_TAG_STYLE = { color: '#e5e7eb', text_color: '#1f2933' };
 
 // Tag editor for a task: the chosen tags, a box to type a new one, and
-// clickable suggestions. `suggestions` is { project: [tag], other: [tag] }.
+// clickable suggestions. `suggestions` is { project: [tag] }: the tags the
+// project already has.
 // Returns { el, values() } where values() is the list of tag names.
 export function tagPicker(selectedTags, suggestions) {
-  const known = [...suggestions.project, ...suggestions.other];
+  const known = suggestions.project;
   const styleOf = (name) => known.find((tag) => tag.name.toLowerCase() === name.toLowerCase()) || NEW_TAG_STYLE;
   const selected = selectedTags.map((tag) => tag.name);
   const has = (name) => selected.some((n) => n.toLowerCase() === name.toLowerCase());
@@ -147,11 +148,8 @@ export function tagPicker(selectedTags, suggestions) {
       button.addEventListener('click', () => add(tag.name));
       return button;
     });
-    const own = offer(suggestions.project);
-    const other = offer(suggestions.other);
-    append(clear(suggestedEl),
-      own.length ? [h('span', { class: 'muted' }, 'Del projecte:'), own] : null,
-      other.length ? [h('span', { class: 'muted' }, "D'altres projectes:"), other] : null);
+    const suggested = offer(suggestions.project);
+    append(clear(suggestedEl), suggested.length ? [h('span', { class: 'muted' }, 'Etiquetes suggerides:'), suggested] : null);
   }
 
   const commit = () => { add(input.value); input.value = ''; input.focus(); };

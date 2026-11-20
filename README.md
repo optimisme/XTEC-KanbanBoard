@@ -225,7 +225,7 @@ projecte. Una tasca en pot tenir tantes com calgui, o cap. No donen ni treuen
 permisos.
 
 - Es creen escrivint un nom nou mentre s'edita una tasca; l'editor suggereix
-  les del projecte i les que la persona ha fet servir en altres projectes.
+  les que el projecte ja té («Etiquetes suggerides»).
 - Una etiqueta nova rep un color automàticament. Noms, colors i eliminacions
   es gestionen a la pestanya *Configuració* del projecte.
 - Eliminar una etiqueta només la treu de les tasques que la tenien.

@@ -60,14 +60,10 @@ export async function list(user, projectId) {
   return tagRepo.listForProject(db, projectId);
 }
 
-// What to offer while tagging a task: this project's tags, plus names used in
-// the person's other projects (created here when chosen).
+// What to offer while tagging a task: the tags this project already has.
 export async function suggestions(user, projectId) {
   await managerAccess(db, user, projectId);
-  const own = await tagRepo.listForProject(db, projectId);
-  const others = await tagRepo.namesFromOtherProjects(db, { projectId, teacherId: user.role === 'admin' ? null : user.id });
-  const ownNames = new Set(own.map((tag) => tag.name.toLowerCase()));
-  return { project: own, other: others.filter((tag) => !ownNames.has(tag.name.toLowerCase())) };
+  return { project: await tagRepo.listForProject(db, projectId) };
 }
 
 export async function create(user, projectId, body) {

@@ -57,16 +57,3 @@ export async function colorUsedElsewhere(db, name) {
   return rows[0] || null;
 }
 
-// Tag names used in the other projects the person works on (every project
-// for administrators), offered as suggestions.
-export function namesFromOtherProjects(db, { projectId, teacherId }) {
-  return db.query(
-    `SELECT pt.name, MIN(pt.color) AS color, MIN(pt.text_color) AS text_color
-       FROM project_tags pt
-      WHERE pt.project_id <> ?
-        AND (? IS NULL OR EXISTS (SELECT 1 FROM project_teachers t
-                                   WHERE t.project_id = pt.project_id AND t.user_id = ?))
-      GROUP BY pt.name ORDER BY pt.name ASC LIMIT 60`,
-    [projectId, teacherId, teacherId]
-  );
-}
