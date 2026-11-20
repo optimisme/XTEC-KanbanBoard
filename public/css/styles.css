@@ -479,6 +479,8 @@ body.reordering { cursor: grabbing; user-select: none; -webkit-user-select: none
 /* Actions at the right end of the row; a .grow item keeps to the left. */
 .toolbar.end { justify-content: flex-end; }
 .toolbar .grow { margin-right: auto; }
+/* The legend of the matrix sits at the right end of the filter row. */
+.toolbar .legend { margin: 0 0 0 auto; }
 .toolbar select { width: auto; min-width: 200px; }
 
 /* ---- Teamwork badges ---------------------------------------------------- */

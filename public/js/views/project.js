@@ -499,14 +499,19 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
                     class: `cell ${cell.status}`, type: 'button', title: label, 'aria-label': label,
                     onClick: () => openTaskModal(cell.group_task_id, { readOnly: true }).catch(showError),
                   }, icon(cell.status)));
-              })))))),
-        h('div', { class: 'legend' }, STATUSES.map(statusBadge))
+              }))))))
       );
       if (scrolled) [holder.firstChild.scrollLeft, holder.firstChild.scrollTop] = scrolled;
     }
 
     filter.addEventListener('change', () => draw().catch(showError));
-    append(content, h('div', { class: 'toolbar' }, h('label', { for: 'matrix-tag' }, 'Filtra per etiqueta'), filter), holder);
+    // The filter at the left of the row and, at its right end, what the
+    // colours of the cells mean.
+    append(content,
+      h('div', { class: 'toolbar' },
+        h('label', { for: 'matrix-tag' }, 'Filtra per etiqueta'), filter,
+        h('div', { class: 'legend' }, STATUSES.map(statusBadge))),
+      holder);
     await draw();
     // Real time: the cells follow what the groups do on their boards.
     followProjects(holder, [project.id], draw);
