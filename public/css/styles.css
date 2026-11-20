@@ -324,16 +324,15 @@ td.actions .btn + .btn { margin-left: 6px; }
 /* A card that can be dragged to another column (mouse: pull it; touch: long press). */
 .task-card.can-drag { cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 /* Being carried: a little bigger and with a deeper shadow, above everything. */
-.task-card.lifted { position: fixed; z-index: 1000; margin: 0; scale: 1.05; box-shadow: var(--shadow-lg); cursor: grabbing; }
+.task-card.lifted { position: fixed; z-index: 40; margin: 0; scale: 1.05; box-shadow: var(--shadow-lg); cursor: grabbing; }
 /* Pressed with the mouse, about to be carried: it lifts where it is. */
 .task-card.pressed { position: relative; z-index: 2; scale: 1.05; box-shadow: var(--shadow-lg); cursor: grabbing; }
 /* Gliding back to its place after a cancelled drag. */
 .task-card.lifted.returning { scale: 1; box-shadow: var(--shadow-sm); transition: transform 0.16s ease, scale 0.16s ease, box-shadow 0.16s ease; }
 /* The dimmed copy that keeps the card's place while it is carried. */
 .task-card.drag-ghost { opacity: 0.35; pointer-events: none; }
-/* Just dropped in its new column: it settles back to its size. */
-.task-card.landing { animation: card-land 0.2s ease-out; }
-@keyframes card-land { from { scale: 1.05; box-shadow: var(--shadow-lg); } to { scale: 1; } }
+/* Just dropped: it glides to its place above the other cards (see land() in board.js). */
+.task-card.landing { position: relative; z-index: 3; }
 /* The columns the carried card may be dropped on. */
 .column.drop-allowed { border-style: dashed; border-color: var(--border-strong); }
 .column.drop-allowed.drop-ok { border-style: solid; border-color: var(--in_progress); }
@@ -417,7 +416,6 @@ td.actions .btn + .btn { margin-left: 6px; }
 /* People who ask for less motion get the lift without the animation. */
 @media (prefers-reduced-motion: reduce) {
   .task-card, .task-row, .task-card.lifted.returning { transition: none; }
-  .task-card.landing { animation: none; }
 }
 body.reordering { cursor: grabbing; user-select: none; -webkit-user-select: none; }
 /* On touch screens the arrows are easier to hit. */

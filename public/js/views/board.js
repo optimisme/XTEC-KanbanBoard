@@ -18,7 +18,8 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
   let people = [];
   const remoteDrags = new Map(); // user id -> { user, task_id, status, timer }
   let dragTarget = null;
-  // The task just dropped in a new column: its card settles when it is drawn there.
+  // The card just dropped ({ id, x, y }: the task and the centre of where it was
+  // left): when the board is drawn again it glides from there to its place.
   let landed = null;
   let everShown = false;
   let dragBeat = null;
@@ -218,9 +219,19 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
       for (const prop of ['left', 'top', 'width', 'height', 'transform']) el.style.removeProperty(prop);
     };
     if (target) {
-      settle();
-      landed = task.id;
-      move(task, target);
+      // The card stays where it was dropped, still lifted, while the server
+      // is asked. When the board is drawn again it glides from there to its
+      // place: in the new column, or back in the old one if the move was
+      // refused or cancelled.
+      const box = el.getBoundingClientRect();
+      landed = { id: task.id, x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      move(task, target).finally(() => {
+        // Not drawn again (the board could not be read): put it back.
+        if (el.isConnected) {
+          settle();
+          landed = null;
+        }
+      });
     } else {
       el.classList.add('returning');
       el.style.setProperty('transform', 'translate(0px, 0px)');
@@ -245,6 +256,28 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
     forget();
     if (start.el.isConnected) lift(start.el, start.task, { pointerId: start.pointerId, clientX: start.x, clientY: start.y });
   };
+
+  // The dropped card glides from where it was left to its place on the board,
+  // settling back to its size on the way.
+  function land(cardEl, from) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !cardEl.animate) return;
+    const box = cardEl.getBoundingClientRect();
+    const dx = from.x - (box.left + box.width / 2);
+    const dy = from.y - (box.top + box.height / 2);
+    cardEl.classList.add('landing');
+    const style = getComputedStyle(document.documentElement);
+    const gliding = cardEl.animate(
+      [
+        { translate: `${dx}px ${dy}px`, scale: '1.05', boxShadow: style.getPropertyValue('--shadow-lg') },
+        { translate: '0px 0px', scale: '1', boxShadow: style.getPropertyValue('--shadow-sm') },
+      ],
+      // Longer for a longer way, within limits.
+      { duration: Math.min(360, 180 + Math.hypot(dx, dy) / 4), easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+    );
+    const done = () => cardEl.classList.remove('landing');
+    gliding.addEventListener('finish', done);
+    gliding.addEventListener('cancel', done);
+  }
 
   function enableDrag(el, task) {
     el.addEventListener('pointerdown', (event) => {
@@ -424,8 +457,8 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
     );
     append(clear(boardEl), STATUSES.map(column));
     if (landed !== null) {
-      const cardEl = boardEl.querySelector(`.task-card[data-task="${landed}"]`);
-      if (cardEl) cardEl.classList.add('landing');
+      const cardEl = boardEl.querySelector(`.task-card[data-task="${landed.id}"]`);
+      if (cardEl) land(cardEl, landed);
       landed = null;
     }
     paintRemote();
