@@ -56,6 +56,9 @@ export function createApp() {
           'style-src': ["'self'"],
           // Task descriptions may embed external images over https.
           'img-src': ["'self'", 'https:', 'data:'],
+          // The real-time channel (/ws). Older browsers do not let 'self'
+          // cover WebSockets, so its address is listed as well.
+          'connect-src': ["'self'", config.appUrl.replace(/^http/, 'ws')],
           'object-src': ["'none'"],
           'frame-ancestors': ["'none'"],
           'form-action': ["'self'"],
@@ -73,22 +76,23 @@ export function createApp() {
   );
   app.locals.sessionStore = sessionStore;
 
-  app.use(
-    session({
-      name: COOKIE_NAME,
-      secret: config.sessionSecret,
-      store: sessionStore,
-      resave: false,
-      saveUninitialized: false,
-      rolling: true,
-      cookie: {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: config.isProduction,
-        maxAge: 8 * 60 * 60 * 1000,
-      },
-    })
-  );
+  const sessionParser = session({
+    name: COOKIE_NAME,
+    secret: config.sessionSecret,
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.isProduction,
+      maxAge: 8 * 60 * 60 * 1000,
+    },
+  });
+  // Also used by the real-time channel to recognise who opens a socket.
+  app.locals.sessionParser = sessionParser;
+  app.use(sessionParser);
 
   app.use(express.json({ limit: '1mb' }));
   // A request without a JSON object as its body is handled as an empty one,

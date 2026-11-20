@@ -1,5 +1,6 @@
 // Application shell: session bootstrap, navigation and hash-based routing.
 import { api, ApiError, loadSession, setCsrfToken } from './api.js';
+import { closeBoardChannel } from './realtime.js';
 import { append, clear, closeAllModals, field, h, ROLE_LABELS, run, showError, toast } from './ui.js';
 import { renderUsers } from './views/admin.js';
 import { renderBoard } from './views/board.js';
@@ -34,6 +35,7 @@ function currentPath() {
 }
 
 async function logout() {
+  closeBoardChannel();
   await api.post('/auth/logout').catch(() => {});
   window.location.hash = '';
   window.location.reload();
@@ -160,6 +162,7 @@ function renderUnauthorized(main) {
 let renderToken = 0;
 
 async function renderRoute() {
+  closeBoardChannel();
   const { user } = state.session;
   if (!user) return renderLogin();
   if (user.status !== 'active') return renderAccountState(user);

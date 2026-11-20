@@ -4,6 +4,7 @@ import * as auth from '../controllers/authController.js';
 import * as groupTasks from '../controllers/groupTaskController.js';
 import * as projects from '../controllers/projectController.js';
 import { requireActive, requireRole } from '../middleware/auth.js';
+import { notifyBoards } from '../realtime/notify.js';
 
 const router = Router();
 const adminOnly = requireRole('admin');
@@ -15,6 +16,9 @@ router.get('/session', auth.session);
 // Everything below requires an approved, active account. Project, group and
 // task permissions are then enforced inside the services.
 router.use(requireActive);
+
+// Open boards are told about every successful change below.
+notifyBoards(router);
 
 router.patch('/profile', admin.updateProfile);
 router.put('/profile/password', admin.setPassword);

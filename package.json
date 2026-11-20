@@ -22,7 +22,8 @@
     "marked": "^15.0.0",
     "mysql2": "^3.11.0",
     "openid-client": "^6.1.0",
-    "sanitize-html": "^2.13.0"
+    "sanitize-html": "^2.13.0",
+    "ws": "^8.23.0"
   },
   "overrides": {
     "mysql2": "$mysql2"

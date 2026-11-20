@@ -1,6 +1,7 @@
 import config from '../config/index.js';
 import * as oidc from '../auth/oidc.js';
 import { csrfToken } from '../middleware/csrf.js';
+import { closeSession } from '../realtime/hub.js';
 import * as authService from '../services/authService.js';
 import { HttpError } from '../utils/errors.js';
 import * as v from '../validators/index.js';
@@ -69,6 +70,7 @@ export async function callback(req, res) {
 
 // POST /auth/logout
 export async function logout(req, res) {
+  closeSession(req.sessionID);
   await new Promise((resolve) => req.session.destroy(() => resolve()));
   res.clearCookie(COOKIE_NAME);
   res.status(204).end();

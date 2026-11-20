@@ -90,6 +90,14 @@ responsable en queda com a responsable automàticament. Una tasca bloquejada
 mostra el motiu a la mateixa targeta. Des del tauler, el grup configura el seu
 repositori de GitHub i l'adreça de la seva web.
 
+El tauler s'actualitza sol, en temps real: quan algú mou una tasca, la resta
+de persones que tenen el tauler obert la veuen canviar de columna sense
+recarregar la pàgina. També es veu qui més hi ha al tauler («Ara al tauler»)
+i, mentre algú arrossega una targeta, aquesta queda marcada a les altres
+pantalles amb el seu nom i la columna cap on la porta. És només un avís: si
+dues persones mouen la mateixa tasca alhora, continua guanyant la primera i
+la segona rep un missatge.
+
 ![Tauler Kanban d'un grup](assets/06-tauler.png)
 
 ### Detall d'una tasca
@@ -306,6 +314,7 @@ la interfície.
 | Base de dades | MySQL 8 (InnoDB), amb `mysql2` i consultes parametritzades |
 | Autenticació | OpenID Connect (`openid-client`): Google Workspace o Microsoft Entra ID |
 | Sessions | `express-session` desades a MySQL |
+| Temps real | WebSocket (`ws`) a `/ws`: avisos de canvis, presència i arrossegament en viu |
 | Interfície | HTML, CSS i JavaScript sense cap framework ni pas de compilació |
 | Markdown | `marked` + `sanitize-html` (es converteix i es neteja al servidor) |
 | Proves | L'executor de proves de Node.js (`node --test`) + `supertest` |
@@ -475,7 +484,9 @@ Requisits generals:
    reals i `DEV_AUTH_ENABLED=false`.
 2. Servir l'aplicació darrere d'un servidor intermediari amb HTTPS. Les galetes
    de sessió són `Secure` en producció i l'aplicació confia en un sol salt de
-   proxy (`X-Forwarded-*`).
+   proxy (`X-Forwarded-*`). El servidor intermediari ha de deixar passar les
+   connexions WebSocket de `/ws` (capçaleres `Upgrade`); si no ho fa, els
+   taulers continuen funcionant i es refresquen cada 15 segons.
 3. `npm ci --omit=dev`, `npm run migrate` i `npm start` sota un gestor de processos.
 4. Fer còpies de seguretat de la base de dades amb regularitat.
 
@@ -543,6 +554,12 @@ contenidor Proxmox.
   impedeix executar scripts externs.
 - **Comptes desactivats**: perden l'accés a l'instant, perquè l'usuari es
   torna a llegir de la base de dades a cada petició.
+- **Temps real**: el canal WebSocket no porta dades dels taulers ni permet
+  modificar res; només avisa que un tauler ha canviat, i cada navegador el
+  torna a llegir per l'API amb els seus permisos. Per obrir-lo cal la galeta
+  de sessió i que la pàgina sigui la de l'aplicació (capçalera `Origin`). Els
+  permisos es tornen a comprovar cada minut i sempre que canvia el projecte, i
+  el canal es tanca en sortir de la sessió.
 
 Les decisions de disseny s'expliquen a [docs/architecture.md](docs/architecture.md).
 
@@ -577,6 +594,7 @@ amb `GET /api/session`).
 │   ├── services/       regles de negoci i autorització
 │   ├── repositories/   SQL
 │   ├── middleware/     usuari de la sessió, CSRF, errors
+│   ├── realtime/       canal WebSocket: sales per tauler i avisos de canvis
 │   ├── validators/     validació de les dades d'entrada
 │   ├── utils/          errors, Markdown, colors
 │   └── db/             connexions, migracions, create-admin

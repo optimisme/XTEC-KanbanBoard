@@ -2,6 +2,10 @@
 
 let csrfToken = '';
 
+// Identifies this tab. The server echoes it in the real-time notice of every
+// change made from here, so the tab does not reload what it has just drawn.
+export const clientId = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+
 export class ApiError extends Error {
   constructor(status, body) {
     super((body && body.message) || "S'ha produït un error inesperat.");
@@ -13,7 +17,10 @@ export class ApiError extends Error {
 
 async function request(method, url, body) {
   const options = { method, credentials: 'same-origin', headers: { Accept: 'application/json' } };
-  if (method !== 'GET') options.headers['X-CSRF-Token'] = csrfToken;
+  if (method !== 'GET') {
+    options.headers['X-CSRF-Token'] = csrfToken;
+    options.headers['X-Client-Id'] = clientId;
+  }
   if (body !== undefined) {
     options.headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(body);

@@ -1,16 +1,24 @@
 // Group Kanban board: four status columns, drag-and-drop plus an accessible
 // "move to" control on every card. Cards always follow the global task order.
 import { api } from '../api.js';
+import { openBoardChannel } from '../realtime.js';
 import {
   append, avatar, clear, formatDateTime, groupLabel, h, icon, modal, toggleSwitch, tagChips, promptDialog, run, showError, STATUS_LABELS, STATUSES, toast,
 } from '../ui.js';
 import { changeTaskStatus, openTaskModal } from './taskModal.js';
 
-export async function renderBoard(view, [groupId, openTaskId], { user }) {
+export async function renderBoard(view, [groupId, openTaskId], { user, rerender }) {
   let board = await api.get(`/api/groups/${groupId}/board`);
   const boardEl = h('div', { class: 'board' });
   const infoEl = h('div', { class: 'board-info' });
+  const peopleEl = h('span', { class: 'board-people' });
   let dragged = null;
+  let channel = null;
+  // What the other people on this board are doing right now (real time).
+  let people = [];
+  const remoteDrags = new Map(); // user id -> { user, task_id, status, timer }
+  let dragTarget = null;
+  let dragBeat = null;
   // Teachers and administrators see the board read-only until they switch
   // editing on, so a group's work is never changed by a stray click or drag.
   // Students always work on their own board. Editing is off again every time
@@ -18,9 +26,78 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
   let editing = !board.can_manage;
   const canEdit = () => editing && board.project.status === 'active';
 
+  let reads = 0;
   async function refresh() {
-    board = await api.get(`/api/groups/${groupId}/board`);
+    const read = ++reads;
+    const fresh = await api.get(`/api/groups/${groupId}/board`);
+    if (read !== reads) return; // A newer read is on its way.
+    board = fresh;
     draw();
+  }
+
+  // ---- Real time ---------------------------------------------------------------
+
+  // Somebody else changed the board. Redrawing would cancel a drag or close
+  // an open "Mou a…" list, so it waits until those are over.
+  let remotePending = false;
+  let remoteTimer = null;
+  const busy = () => dragged || (boardEl.contains(document.activeElement) && document.activeElement.tagName === 'SELECT');
+  function remoteChange() {
+    clearTimeout(remoteTimer);
+    remoteTimer = setTimeout(async () => {
+      if (!boardEl.isConnected) return;
+      if (busy()) {
+        remotePending = true;
+        return;
+      }
+      remotePending = false;
+      try {
+        await refresh();
+      } catch (err) {
+        // The board is no longer theirs to see (hidden project, changed group).
+        if (err.status === 403 || err.status === 404) rerender();
+      }
+    }, 200);
+  }
+  const resumeRemote = () => remotePending && remoteChange();
+  boardEl.addEventListener('focusout', () => setTimeout(resumeRemote, 0));
+
+  // Marks the cards other people are dragging, and where they are heading.
+  function paintRemote() {
+    boardEl.querySelectorAll('.remote-drag').forEach((el) => el.classList.remove('remote-drag'));
+    boardEl.querySelectorAll('.remote-target').forEach((el) => el.classList.remove('remote-target'));
+    boardEl.querySelectorAll('.remote-note').forEach((el) => el.remove());
+    for (const drag of remoteDrags.values()) {
+      const cardEl = boardEl.querySelector(`.task-card[data-task="${drag.task_id}"]`);
+      if (!cardEl) continue;
+      cardEl.classList.add('remote-drag');
+      cardEl.append(h('div', { class: 'remote-note' }, avatar(drag.user.name),
+        drag.status ? `${drag.user.name} la mou cap a «${STATUS_LABELS[drag.status]}»` : `${drag.user.name} l'està movent`));
+      const columnEl = drag.status ? boardEl.querySelector(`.column[data-status="${drag.status}"]`) : null;
+      if (columnEl) columnEl.classList.add('remote-target');
+    }
+  }
+
+  function paintPeople() {
+    const others = people.filter((person) => person.id !== user.id);
+    append(clear(peopleEl), others.length
+      ? [h('strong', {}, 'Ara al tauler: '), others.map((person) => h('span', { class: 'person-here' }, avatar(person.name), person.name))]
+      : null);
+  }
+
+  function forgetDrag(userId) {
+    const drag = remoteDrags.get(userId);
+    if (!drag) return;
+    clearTimeout(drag.timer);
+    remoteDrags.delete(userId);
+    paintRemote();
+  }
+
+  // Tells the others which card is being dragged here and over which column.
+  function announceDrag(status) {
+    if (!dragged || !channel) return;
+    dragTarget = status;
+    channel.send({ type: 'drag', task_id: dragged.id, status });
   }
 
   async function move(task, status, control) {
@@ -52,7 +129,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
       : null;
     if (moveSelect) moveSelect.addEventListener('change', () => moveSelect.value && move(task, moveSelect.value, moveSelect));
 
-    const el = h('article', { class: `task-card ${task.status}`, draggable: canMove ? 'true' : null },
+    const el = h('article', { class: `task-card ${task.status}`, 'data-task': String(task.id), draggable: canMove ? 'true' : null },
       h('button', { class: 'task-title', type: 'button', onClick: () => openTask(task.id) }, task.title),
       tagChips(task.tags),
       task.status === 'blocked' && task.block_reason
@@ -85,11 +162,19 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/plain', String(task.id));
         el.classList.add('dragging');
+        announceDrag(null);
+        // Repeated while the drag lasts, so a lost "it ended" cannot leave
+        // the card marked on the other screens for ever.
+        dragBeat = setInterval(() => announceDrag(dragTarget), 5000);
       });
       el.addEventListener('dragend', () => {
         dragged = null;
+        dragTarget = null;
+        clearInterval(dragBeat);
+        if (channel) channel.send({ type: 'drag_end' });
         el.classList.remove('dragging');
         boardEl.querySelectorAll('.drop-ok').forEach((c) => c.classList.remove('drop-ok'));
+        resumeRemote();
       });
     }
     return el;
@@ -102,7 +187,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
     if (status === 'completed') {
       tasks.sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at) || a.sort_order - b.sort_order);
     }
-    const el = h('section', { class: `column ${status}`, 'aria-label': STATUS_LABELS[status] },
+    const el = h('section', { class: `column ${status}`, 'data-status': status, 'aria-label': STATUS_LABELS[status] },
       h('div', { class: 'column-header' },
         h('h2', {}, icon(status), STATUS_LABELS[status]),
         h('span', { class: 'count', 'aria-label': `${tasks.length} tasques` }, String(tasks.length))),
@@ -113,9 +198,12 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
       if (!accepts()) return;
       event.preventDefault();
       el.classList.add('drop-ok');
+      if (dragTarget !== status) announceDrag(status);
     });
     el.addEventListener('dragleave', (event) => {
-      if (!el.contains(event.relatedTarget)) el.classList.remove('drop-ok');
+      if (el.contains(event.relatedTarget)) return;
+      el.classList.remove('drop-ok');
+      if (dragTarget === status) announceDrag(null);
     });
     el.addEventListener('drop', (event) => {
       if (!accepts()) return;
@@ -178,9 +266,11 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
           ? h('a', { href: group.web_url, target: '_blank', rel: 'noopener noreferrer' }, group.web_url.replace(/^https?:\/\//, '').replace(/\/$/, ''))
           : 'sense web',
         ' ',
-        canSetGithub ? webButton : null)
+        canSetGithub ? webButton : null),
+      peopleEl
     );
     append(clear(boardEl), STATUSES.map(column));
+    paintRemote();
   }
 
   // The project description, for students (staff read it in the project page).
@@ -219,6 +309,33 @@ export async function renderBoard(view, [groupId, openTaskId], { user }) {
     boardEl
   );
   draw();
+
+  // Opened once the board is really on screen: a board that lost the race
+  // against a newer navigation must not take the channel from the new page.
+  const handlers = {
+    onChange: remoteChange,
+    onPeople(list) {
+      people = list;
+      paintPeople();
+    },
+    onDrag(drag) {
+      if (drag.user.id === user.id) return; // The same person in another tab.
+      const previous = remoteDrags.get(drag.user.id);
+      if (previous) clearTimeout(previous.timer);
+      remoteDrags.set(drag.user.id, { ...drag, timer: setTimeout(() => forgetDrag(drag.user.id), 15000) });
+      paintRemote();
+    },
+    onDragEnd: forgetDrag,
+    onOffline() {
+      people = [];
+      paintPeople();
+      for (const userId of [...remoteDrags.keys()]) forgetDrag(userId);
+    },
+    onDenied: rerender,
+  };
+  setTimeout(() => {
+    if (boardEl.isConnected) channel = openBoardChannel(Number(groupId), handlers);
+  }, 0);
 
   if (openTaskId) openTask(Number(openTaskId));
 }

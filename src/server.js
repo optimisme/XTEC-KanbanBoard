@@ -1,6 +1,7 @@
 import config from './config/index.js';
 import { createApp } from './app.js';
 import { closePool, pool } from './db/pool.js';
+import { attachRealtime } from './realtime/hub.js';
 
 async function start() {
   // Fail fast with a clear message when the database is unreachable or the
@@ -18,7 +19,10 @@ async function start() {
     if (config.devAuthEnabled) console.warn('WARNING: development login is enabled. Never use this in production.');
   });
 
+  const closeRealtime = attachRealtime(server, app);
+
   const shutdown = () => {
+    closeRealtime();
     server.close(async () => {
       await app.locals.sessionStore.close().catch(() => {});
       await closePool().catch(() => {});
