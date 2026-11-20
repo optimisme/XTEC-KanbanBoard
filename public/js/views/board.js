@@ -22,6 +22,8 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
   // left): when the board is drawn again it glides from there to its place.
   let landed = null;
   let everShown = false;
+  // Resolves when the glide of the last dropped card is over.
+  let landing = Promise.resolve();
   let dragBeat = null;
   // Teachers and administrators see the board read-only until they switch
   // editing on, so a group's work is never changed by a stray click or drag.
@@ -225,7 +227,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
       // refused or cancelled.
       const box = el.getBoundingClientRect();
       landed = { id: task.id, x: box.left + box.width / 2, y: box.top + box.height / 2 };
-      move(task, target).finally(() => {
+      (target === 'blocked' ? blockAfterLanding(task) : move(task, target)).finally(() => {
         // Not drawn again (the board could not be read): put it back.
         if (el.isConnected) {
           settle();
@@ -277,6 +279,37 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
     const done = () => cardEl.classList.remove('landing');
     gliding.addEventListener('finish', done);
     gliding.addEventListener('cancel', done);
+    landing = gliding.finished.catch(() => {});
+  }
+
+  const centreOf = (taskId) => {
+    const cardEl = boardEl.querySelector(`.task-card[data-task="${taskId}"]`);
+    if (!cardEl) return null;
+    const box = cardEl.getBoundingClientRect();
+    return { id: taskId, x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  };
+
+  // A card dropped on "Bloquejat" first lands there, and only then is the
+  // reason asked. If the reason is not given (or the server refuses), the
+  // card glides back to the place it came from.
+  async function blockAfterLanding(task) {
+    const from = task.status;
+    task.status = 'blocked'; // Only on screen, until the server confirms it.
+    landing = Promise.resolve();
+    draw();
+    await landing;
+    let updated = null;
+    try {
+      updated = await changeTaskStatus({ ...task, status: from }, 'blocked');
+    } catch (err) {
+      showError(err);
+    }
+    if (!updated) {
+      task.status = from;
+      landed = centreOf(task.id);
+    }
+    // Always re-read: the server is the source of truth.
+    await refresh().catch(() => draw());
   }
 
   function enableDrag(el, task) {
