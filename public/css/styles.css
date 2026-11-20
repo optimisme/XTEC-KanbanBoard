@@ -4,8 +4,11 @@
   --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-muted: #f1f3f5;
-  --border: #e3e6ea;
-  --border-strong: #cfd4da;
+  --border: #d5dae1;
+  --border-strong: #bcc3cd;
+  /* Header strips of tables: clearly darker than the page and the cards. */
+  --strip: #dfe5ec;
+  --strip-text: #3d4852;
   --text: #1f2933;
   --text-muted: #5f6b7a;
   --accent: #1f2937;
@@ -27,8 +30,8 @@
 
   --radius: 8px;
   --radius-sm: 6px;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08), 0 2px 6px rgba(16, 24, 40, 0.06);
+  --shadow: 0 2px 4px rgba(16, 24, 40, 0.10), 0 4px 12px rgba(16, 24, 40, 0.08);
   --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.18);
   --gutter: 24px;
 }
@@ -247,7 +250,7 @@ button.chip.suggestion:hover { opacity: 1; }
 table { width: 100%; border-collapse: collapse; }
 .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
 th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
-th { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); background: var(--surface-muted); white-space: nowrap; }
+th { font-size: 0.8rem; font-weight: 600; color: var(--strip-text); background: var(--strip); border-bottom-color: var(--border-strong); white-space: nowrap; }
 tr:last-child td { border-bottom: 0; }
 td.actions { white-space: nowrap; text-align: right; }
 td.actions .btn + .btn { margin-left: 6px; }
@@ -387,7 +390,7 @@ td.actions .btn + .btn { margin-left: 6px; }
   position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 170px; max-width: 220px;
   text-align: left; white-space: normal; font-weight: 400;
 }
-.matrix thead .group-head { z-index: 3; background: var(--surface-muted); }
+.matrix thead .group-head { z-index: 3; background: var(--strip); }
 .matrix .group-head strong { display: block; color: var(--text); font-size: 0.9rem; }
 .matrix .group-head small { font-size: 0.78rem; }
 .cell {
