@@ -10,12 +10,13 @@ import { WebSocketServer } from 'ws';
 import config from '../config/index.js';
 import { db } from '../db/pool.js';
 import * as userRepo from '../repositories/userRepository.js';
-import { groupAccess } from '../services/accessService.js';
+import { groupAccess, projectAccess } from '../services/accessService.js';
 import { STATUSES } from '../services/groupTaskService.js';
 
 const PATH = '/ws';
 const MAX_MESSAGE_BYTES = 1024;
 const MAX_SOCKETS_PER_USER = 10;
+const MAX_WATCHED_PROJECTS = 100;
 const MAX_MESSAGES_PER_WINDOW = 100;
 const RATE_WINDOW_MS = 10 * 1000;
 // Proxies drop silent connections (Cloudflare after about 100 seconds).
@@ -35,6 +36,8 @@ const send = (ws, message) => {
 };
 const inGroup = (groupId) => [...clients].filter((ws) => ws.state.room && ws.state.room.groupId === groupId);
 const inProject = (projectId) => [...clients].filter((ws) => ws.state.room && ws.state.room.projectId === projectId);
+// Pages that follow whole projects (matrix, badges, blocked tasks).
+const watching = (projectId) => [...clients].filter((ws) => ws.state.watch.has(projectId));
 
 function broadcast(groupId, message, except = null) {
   for (const ws of inGroup(groupId)) if (ws !== except) send(ws, message);
@@ -81,6 +84,22 @@ async function subscribe(ws, groupId) {
   return broadcast(groupId, { type: 'presence', people: presence(groupId) }, ws);
 }
 
+// Follows whole projects instead of one board. The list replaces the previous
+// one, and only the projects the person can see are kept.
+async function watch(ws, projectIds) {
+  const allowed = new Set();
+  for (const projectId of projectIds) {
+    try {
+      await projectAccess(db, ws.state.account, projectId);
+      allowed.add(projectId);
+    } catch {
+      // Not theirs: left out.
+    }
+  }
+  ws.state.watch = allowed;
+  send(ws, { type: 'watching', project_ids: [...allowed] });
+}
+
 async function onMessage(ws, raw) {
   const now = Date.now();
   if (now - ws.state.windowStart > RATE_WINDOW_MS) {
@@ -100,6 +119,10 @@ async function onMessage(ws, raw) {
 
   if (message.type === 'subscribe' && Number.isSafeInteger(message.group_id) && message.group_id > 0) {
     return subscribe(ws, message.group_id);
+  }
+  if (message.type === 'watch' && Array.isArray(message.project_ids) && message.project_ids.length <= MAX_WATCHED_PROJECTS
+    && message.project_ids.every((id) => Number.isSafeInteger(id) && id > 0)) {
+    return watch(ws, message.project_ids);
   }
   if (!ws.state.room) return undefined;
   if (message.type === 'drag' && Number.isSafeInteger(message.task_id) && message.task_id > 0) {
@@ -125,6 +148,15 @@ async function recheck(ws) {
     ws.state.account = account;
     ws.state.user = { id: account.id, name: account.name, role: account.role };
     if (ws.state.room) await groupAccess(db, account, ws.state.room.groupId);
+    for (const projectId of [...ws.state.watch]) {
+      try {
+        await projectAccess(db, account, projectId);
+      } catch {
+        // One last notice, so the page reads again and finds out it lost access.
+        ws.state.watch.delete(projectId);
+        send(ws, { type: 'project_changed', project_id: projectId, origin: '' });
+      }
+    }
   } catch {
     return ws.close(CLOSE_DENIED, 'denied');
   }
@@ -133,9 +165,13 @@ async function recheck(ws) {
 
 // ---- Used by the REST API ---------------------------------------------------------
 
-// A task of one group changed.
-export function publishGroup(groupId, message) {
+// A task of one group changed: its board is told, and so are the pages that
+// follow the whole project.
+export function publishGroup(groupId, projectId, message) {
   broadcast(groupId, message);
+  for (const ws of watching(projectId)) {
+    send(ws, { ...message, type: 'project_changed', project_id: projectId, group_id: groupId });
+  }
 }
 
 // Something shared by the whole project changed (tasks, tags, members, the
@@ -143,8 +179,10 @@ export function publishGroup(groupId, message) {
 // checked again before it is told.
 export async function publishProject(projectId, message) {
   await Promise.all(
-    inProject(projectId).map(async (ws) => {
-      if ((await recheck(ws)) === true) send(ws, message);
+    [...new Set([...inProject(projectId), ...watching(projectId)])].map(async (ws) => {
+      if ((await recheck(ws)) !== true) return;
+      if (ws.state.room && ws.state.room.projectId === projectId) send(ws, message);
+      if (ws.state.watch.has(projectId)) send(ws, { ...message, type: 'project_changed', project_id: projectId });
     })
   );
 }
@@ -192,6 +230,7 @@ export function attachRealtime(server, app) {
             user: { id: account.id, name: account.name, role: account.role },
             sessionId: req.sessionID,
             room: null,
+            watch: new Set(),
             drag: null,
             alive: true,
             messages: 0,

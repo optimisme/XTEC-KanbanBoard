@@ -34,7 +34,8 @@ export function notifyBoards(router) {
   router.param('tagId', target(projectOf(tagRepo.findById)));
   router.param('groupTaskId', target(async (id) => {
     const row = await groupTaskRepo.findById(db, id);
-    return row ? { groupId: row.group_id, taskId: id } : null;
+    const group = row ? await groupRepo.findById(db, row.group_id) : null;
+    return group ? { groupId: group.id, groupProjectId: group.project_id, taskId: id } : null;
   }));
   // /users/:id — the account itself changed.
   router.param('id', target(async (id) => ({ userId: id })));
@@ -48,7 +49,8 @@ export function notifyBoards(router) {
         const origin = String(req.get('x-client-id') || '').slice(0, 40);
         const actor = req.user ? req.user.id : null;
         if (touched.groupId) {
-          publishGroup(touched.groupId, { type: 'board_changed', task_id: touched.taskId, origin, actor_id: actor });
+          publishGroup(touched.groupId, touched.groupProjectId,
+            { type: 'board_changed', task_id: touched.taskId, origin, actor_id: actor });
         }
         if (touched.projectId) publishProject(touched.projectId, { type: 'board_changed', origin, actor_id: actor }).catch(() => {});
         if (touched.userId) recheckUser(touched.userId).catch(() => {});

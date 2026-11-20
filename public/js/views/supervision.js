@@ -1,6 +1,7 @@
 // Teacher supervision: blocked tasks dashboard and individual student
 // contribution view.
 import { api } from '../api.js';
+import { followProjects } from '../realtime.js';
 import { append, clear, formatDateTime, formatDuration, groupLabel, h, secondsSince, showError, statusBadge } from '../ui.js';
 import { historyItem, openTaskModal } from './taskModal.js';
 
@@ -45,6 +46,11 @@ export async function renderBlocked(view) {
     holder
   );
   await load();
+
+  // Real time: a task blocked or unblocked in any supervised project shows up
+  // or goes away by itself.
+  const projects = await api.get('/api/projects');
+  followProjects(holder, projects.filter((p) => p.status === 'active').map((p) => p.id), load);
 
   // Blocking durations keep growing while the page is open.
   const timer = setInterval(() => {

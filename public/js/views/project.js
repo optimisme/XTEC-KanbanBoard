@@ -1,6 +1,7 @@
 // Project page with its tabs: groups, shared tasks, progress matrix,
 // students and (administrators only) settings.
 import { api } from '../api.js';
+import { followProjects } from '../realtime.js';
 import {
   append, clear, confirmDialog, field, groupLabel, h, icon, modal, plainInput, promptDialog, readableTextColor, run, showError,
   STATUS_LABELS, tagChip, tagChips,
@@ -9,7 +10,7 @@ import {
 import { emailSuggestions } from '../people.js';
 import { academicYearSelect, openProjectForm } from './projects.js';
 import { openDefinition, openImport, openTaskEditor } from './taskEditor.js';
-import { rankingContent, renderStudentRanking } from './ranking.js';
+import { liveRanking, renderStudentRanking } from './ranking.js';
 import { openTaskModal } from './taskModal.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -55,7 +56,7 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
     content
   );
 
-  const renderers = { ranking: async () => { append(content, await rankingContent(project.id)); }, description: descriptionTab, groups: groupsTab, tasks: tasksTab, matrix: matrixTab, students: studentsTab, settings: settingsTab };
+  const renderers = { ranking: async () => { append(content, await liveRanking(project.id)); }, description: descriptionTab, groups: groupsTab, tasks: tasksTab, matrix: matrixTab, students: studentsTab, settings: settingsTab };
   await renderers[tab]();
 
   // ---- Description -------------------------------------------------------------
@@ -312,6 +313,9 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
         append(clear(holder), h('div', { class: 'empty' }, 'No hi ha dades per mostrar: calen grups i tasques.'));
         return;
       }
+      // A redraw (real time) keeps a wide matrix scrolled where it was.
+      const previous = holder.querySelector('.matrix-wrap');
+      const scrolled = previous ? [previous.scrollLeft, previous.scrollTop] : null;
       append(clear(holder), 
         h('div', { class: 'matrix-wrap' },
           h('table', { class: 'matrix' },
@@ -335,11 +339,14 @@ export async function renderProject(view, [projectId, tabParam], ctx) {
               })))))),
         h('div', { class: 'legend' }, STATUSES.map(statusBadge))
       );
+      if (scrolled) [holder.firstChild.scrollLeft, holder.firstChild.scrollTop] = scrolled;
     }
 
     filter.addEventListener('change', () => draw().catch(showError));
     append(content, h('div', { class: 'toolbar' }, h('label', { for: 'matrix-tag' }, 'Filtra per etiqueta'), filter), holder);
     await draw();
+    // Real time: the cells follow what the groups do on their boards.
+    followProjects(holder, [project.id], draw);
   }
 
   // ---- Students -------------------------------------------------------------------

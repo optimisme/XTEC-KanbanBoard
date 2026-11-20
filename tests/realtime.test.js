@@ -173,6 +173,52 @@ test('people on a board see each other and each other\'s drags', async () => {
   for (const socket of [b, late]) socket.ws.close();
 });
 
+test('pages that follow a whole project hear about every board of it', async () => {
+  const watch = async (client, ids) => {
+    const socket = connect(client);
+    await socket.opened;
+    socket.say({ type: 'watch', project_ids: ids });
+    socket.watching = (await socket.next('watching')).project_ids;
+    return socket;
+  };
+  const staff = await watch(teacher, [s.project.id]);
+  assert.deepEqual(staff.watching, [s.project.id]);
+  // A student may follow their own project (the badges page)...
+  const member = await watch(student3, [s.project.id, 99999]);
+  assert.deepEqual(member.watching, [s.project.id]);
+  // ...but nobody follows a project that is not theirs.
+  const outsider = await watch(await login(s.users.otherTeacher.email), [s.project.id]);
+  assert.deepEqual(outsider.watching, []);
+
+  const task = await groupTaskOf(student2, s.group0.id, s.tasks[2].id);
+  assert.equal((await student2.post(`/api/group-tasks/${task.id}/status`, { status: 'in_progress', expected_status: 'pending' })).status, 200);
+  for (const socket of [staff, member]) {
+    assert.deepEqual(await socket.next('project_changed'), {
+      type: 'project_changed',
+      project_id: s.project.id,
+      group_id: s.group0.id,
+      task_id: task.id,
+      origin: '',
+      actor_id: s.users.s2.id,
+    });
+  }
+  await silent(outsider, 'project_changed');
+
+  // A change to the project itself carries no task.
+  assert.equal((await teacher.post(`/api/projects/${s.project.id}/tasks`, { title: 'Task E', description: 'New', tags: [] })).status, 201);
+  assert.equal((await staff.next('project_changed')).task_id, undefined);
+
+  // Losing the project ends the notices, after one last one to read again.
+  assert.equal((await s.admin.put(`/api/projects/${s.project.id}/teachers`, { teacher_ids: [] })).status, 200);
+  assert.equal((await staff.next('project_changed')).project_id, s.project.id);
+  assert.equal((await s.admin.post(`/api/projects/${s.project.id}/tasks`, { title: 'Task F', description: 'New', tags: [] })).status, 201);
+  await member.next('project_changed');
+  await member.next('project_changed');
+  await silent(staff, 'project_changed');
+  assert.equal((await s.admin.put(`/api/projects/${s.project.id}/teachers`, { teacher_ids: [s.users.teacher.id] })).status, 200);
+  for (const socket of [staff, member, outsider]) socket.ws.close();
+});
+
 test('the channel closes when access ends', async () => {
   // Hiding the project takes it away from its students at once.
   const hiddenFrom = await join(student1, s.group0.id);

@@ -98,6 +98,11 @@ pantalles amb el seu nom i la columna cap on la porta. És només un avís: si
 dues persones mouen la mateixa tasca alhora, continua guanyant la primera i
 la segona rep un missatge.
 
+La resta de pantalles també es mantenen al dia soles: la matriu de progrés,
+les insígnies, la llista de tasques bloquejades i el detall d'una tasca
+oberta, que es torna a carregar sense perdre el comentari que s'hi estigui
+escrivint.
+
 ![Tauler Kanban d'un grup](assets/06-tauler.png)
 
 ### Detall d'una tasca

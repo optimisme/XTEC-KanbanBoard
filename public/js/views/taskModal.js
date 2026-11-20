@@ -1,6 +1,7 @@
 // Group task detail dialog: description, state, responsibility, comments,
 // blocking events and activity history.
 import { api } from '../api.js';
+import { onNotice } from '../realtime.js';
 import {
   append, avatar, clear, EVENT_LABELS, formatDateTime, formatDuration, groupLabel, h, icon, modal, tagChips,
   promptDialog, run, secondsSince, STATUS_LABELS, statusBadge, toast,
@@ -75,8 +76,53 @@ export function historyItem(event, { withTask = false } = {}) {
 export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly = false } = {}) {
   let task = await api.get(`/api/group-tasks/${groupTaskId}`);
   let activeTab = 'description';
+  // The comment being written survives every redraw of the dialog.
+  let draft = '';
   const content = h('div', { class: 'task-detail' });
-  const dialog = modal({ title: task.title, body: content, wide: true, fit: true });
+  let stopListening = () => {};
+  const dialog = modal({ title: task.title, body: content, wide: true, fit: true, onClose: () => stopListening() });
+
+  // Real time: somebody else changed this task (or the project) while the
+  // dialog is open. It is read again and redrawn where the reader was: same
+  // tab, same scroll position, same half-written comment and cursor.
+  let reloadTimer = null;
+  function remoteChange(notice) {
+    if (notice.task_id && notice.task_id !== task.id) return;
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(async () => {
+      if (!content.isConnected) return undefined;
+      const focused = document.activeElement;
+      // An open list of people would close under the reader's hand.
+      if (content.contains(focused) && focused.tagName === 'SELECT') return remoteChange(notice);
+      let fresh;
+      try {
+        fresh = await api.get(`/api/group-tasks/${task.id}`);
+      } catch (err) {
+        // The task was deleted, or is no longer theirs to see.
+        if (err.status === 403 || err.status === 404) dialog.close();
+        return undefined;
+      }
+      if (!content.isConnected) return undefined;
+      const writing = content.contains(focused) && focused.tagName === 'TEXTAREA'
+        ? { start: focused.selectionStart, end: focused.selectionEnd }
+        : null;
+      const scroll = content.querySelector('.tab-scroll');
+      const atEnd = scroll && scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 4;
+      const top = scroll ? scroll.scrollTop : 0;
+      task = fresh;
+      render();
+      const newScroll = content.querySelector('.tab-scroll');
+      // Somebody reading the newest comments keeps seeing the newest.
+      if (newScroll && !(atEnd && activeTab === 'comments')) newScroll.scrollTop = top;
+      const textarea = content.querySelector('.comment-form textarea');
+      if (writing && textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(writing.start, writing.end);
+      }
+      return undefined;
+    }, 300);
+  }
+  stopListening = onNotice(remoteChange);
 
   const update = (updated) => {
     if (!updated) return;
@@ -218,12 +264,18 @@ export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly
     let form = null;
     if (task.can_contribute && !readOnly) {
       const text = h('textarea', { rows: '2', maxlength: '5000', required: true, placeholder: 'Escriu un comentari…', 'aria-label': 'Comentari nou' });
+      text.value = draft;
+      text.addEventListener('input', () => { draft = text.value; });
       const send = h('button', { class: 'btn primary', type: 'submit' }, 'Comenta');
       form = h('form', {
         class: 'comment-form',
         onSubmit: (event) => {
           event.preventDefault();
-          run(send, async () => update(await api.post(`/api/group-tasks/${task.id}/comments`, { content: text.value })));
+          run(send, async () => {
+            const updated = await api.post(`/api/group-tasks/${task.id}/comments`, { content: text.value });
+            draft = '';
+            update(updated);
+          });
         },
       }, text, send);
     }

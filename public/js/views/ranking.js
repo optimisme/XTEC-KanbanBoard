@@ -3,6 +3,7 @@
 // badge. Staff see it as a project tab; students on a page of their own, when
 // the project shows it to them.
 import { api } from '../api.js';
+import { followProjects } from '../realtime.js';
 import { append, groupLabel, h, modal } from '../ui.js';
 
 // What each badge is and how a group earns it.
@@ -132,6 +133,14 @@ export async function rankingContent(projectId) {
       "Treballar en equip no vol dir fer totes les tasques plegats: vol dir que tothom treballa, que la feina es reparteix de manera equitativa i que cada persona sap fer tasques de tipus diferents i tirar-ne endavant una tota sola. Tots els grups poden aconseguir totes les insígnies, i també perdre-les: es calculen sobre tota la feina finalitzada fins ara. El botó «?» de cadascuna explica com. No mesuren la qualitat de la feina, que valora el professorat."));
 }
 
+// The same content, kept up to date in real time: bars and badges follow what
+// the groups do on their boards.
+export async function liveRanking(projectId) {
+  const holder = h('div', {}, await rankingContent(projectId));
+  followProjects(holder, [Number(projectId)], async () => holder.replaceChildren(await rankingContent(projectId)));
+  return holder;
+}
+
 // Page for students, who have no project page of their own.
 export async function renderStudentRanking(view, project) {
   append(view,
@@ -142,5 +151,5 @@ export async function renderStudentRanking(view, project) {
           h('a', { href: `#/groups/${project.my_group_id}` }, project.name)),
         h('h1', {}, 'Insígnies')),
       h('div', { class: 'actions' }, h('a', { class: 'btn', href: `#/groups/${project.my_group_id}` }, 'Torna al tauler'))),
-    await rankingContent(project.id));
+    await liveRanking(project.id));
 }
