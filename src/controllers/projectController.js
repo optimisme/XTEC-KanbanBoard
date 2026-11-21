@@ -20,6 +20,10 @@ export async function get(req, res) {
   res.json(await projectService.get(req.user, projectId(req)));
 }
 
+export async function description(req, res) {
+  res.json(await projectService.description(req.user, projectId(req)));
+}
+
 export async function create(req, res) {
   res.status(201).json(await projectService.create(req.user, req.body));
 }

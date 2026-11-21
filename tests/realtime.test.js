@@ -125,7 +125,9 @@ test('a change reaches everybody on that board and nobody else', async () => {
     // The tab that made the change recognises its own notice.
     assert.equal(message.origin, 'tab-of-student-1');
     // Only a notice: the board itself is read through the API.
-    assert.deepEqual(Object.keys(message).sort(), ['actor_id', 'origin', 'task_id', 'type']);
+    assert.deepEqual(Object.keys(message).sort(), ['actor_id', 'kind', 'origin', 'task_id', 'type']);
+    // What kind of change, so pages that do not show it need not read again.
+    assert.equal(message.kind, 'status');
   }
   await silent(other, 'board_changed');
 
@@ -133,9 +135,23 @@ test('a change reaches everybody on that board and nobody else', async () => {
   assert.equal((await student2.post(`/api/group-tasks/${task.id}/status`, { status: 'in_progress', expected_status: 'pending' })).status, 409);
   await silent(b, 'board_changed');
 
+  // A comment says it is one, and which task it is on.
+  assert.equal((await student1.post(`/api/group-tasks/${task.id}/comments`, { content: 'Hello' })).status, 201);
+  assert.partialDeepStrictEqual(await b.next('board_changed'), { kind: 'comment', task_id: task.id });
+  await silent(other, 'board_changed');
+
+  // A group's own links only matter to its board.
+  assert.equal((await student1.put(`/api/groups/${s.group0.id}/github`, { github_url: 'https://github.com/example/repo' })).status, 200);
+  assert.equal((await b.next('board_changed')).kind, 'links');
+  await silent(other, 'board_changed');
+
+  // A write that changes nothing here is not announced.
+  assert.equal((await teacher.post(`/api/projects/${s.project.id}/duplicate`, { name: 'A copy' })).status, 201);
+  await silent(b, 'board_changed');
+
   // A change to the shared tasks reaches every board of the project.
   assert.equal((await teacher.post(`/api/projects/${s.project.id}/tasks`, { title: 'Task D', description: 'New', tags: [] })).status, 201);
-  await a.next('board_changed');
+  assert.equal((await b.next('board_changed')).kind, 'project');
   await other.next('board_changed');
   for (const socket of [a, b, staff, other]) socket.ws.close();
 });
@@ -195,6 +211,7 @@ test('pages that follow a whole project hear about every board of it', async () 
   for (const socket of [staff, member]) {
     assert.deepEqual(await socket.next('project_changed'), {
       type: 'project_changed',
+      kind: 'status',
       project_id: s.project.id,
       group_id: s.group0.id,
       task_id: task.id,

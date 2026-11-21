@@ -88,6 +88,8 @@ export async function openTaskModal(groupTaskId, { onChange = () => {}, readOnly
   let reloadTimer = null;
   function remoteChange(notice) {
     if (notice.task_id && notice.task_id !== task.id) return;
+    // The group's own links are not shown here.
+    if (notice.kind === 'links') return;
     clearTimeout(reloadTimer);
     reloadTimer = setTimeout(async () => {
       if (!content.isConnected) return undefined;

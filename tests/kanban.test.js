@@ -53,10 +53,12 @@ test('a teacher changing a state never becomes the responsible student', async (
   await teacher.post(`/api/group-tasks/${gtC}/responsible`, { user_id: null });
 });
 
-test('the board carries the project description for students', async () => {
+test('students read the project description, which the board does not carry', async () => {
   const board = (await student1.get(`/api/groups/${s.group0.id}/board`)).body;
-  assert.match(board.project.description_html, /<p>A test project<\/p>/);
+  assert.equal(board.project.description_html, undefined);
   assert.equal(board.can_manage, false);
+  const description = await student1.get(`/api/projects/${s.project.id}/description`);
+  assert.match(description.body.description_html, /<p>A test project<\/p>/);
 });
 
 test('transition policy is enforced on the backend', async () => {
@@ -67,9 +69,10 @@ test('transition policy is enforced on the backend', async () => {
   assert.equal((await setStatus(student1, gtA, 'nonsense')).status, 400);
   // The board advertises exactly the allowed targets.
   const card = await groupTaskOf(student1, s.group0.id, s.tasks[1].id);
-  assert.deepEqual(card.allowed_transitions, ['in_progress']);
-  const teacherCard = await groupTaskOf(teacher, s.group0.id, s.tasks[1].id);
-  assert.deepEqual(teacherCard.allowed_transitions, ['in_progress', 'blocked', 'completed']);
+  assert.deepEqual((await student1.get(`/api/groups/${s.group0.id}/board`)).body.transitions[card.status], ['in_progress']);
+  assert.deepEqual((await teacher.get(`/api/groups/${s.group0.id}/board`)).body.transitions[card.status], ['in_progress', 'blocked', 'completed']);
+  // A single task carries its own.
+  assert.deepEqual((await student1.get(`/api/group-tasks/${card.id}`)).body.allowed_transitions, ['in_progress']);
 });
 
 test('14. tasks have at most one responsible student (schema level)', async () => {

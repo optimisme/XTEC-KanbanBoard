@@ -608,7 +608,7 @@ test('26. archived projects cannot be modified through normal editing endpoints'
   // Still readable for historical consultation, with no transitions offered.
   const board = await student1.get(`/api/groups/${s.group0.id}/board`);
   assert.equal(board.status, 200);
-  assert.ok(board.body.tasks.every((t) => t.allowed_transitions.length === 0));
+  assert.ok(Object.values(board.body.transitions).every((targets) => targets.length === 0));
 
   assert.equal((await s.admin.post(`/api/projects/${s.project.id}/unarchive`)).status, 200);
   assert.equal((await student1.post(`/api/group-tasks/${gt.id}/comments`, { content: 'back' })).status, 201);

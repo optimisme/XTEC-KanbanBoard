@@ -79,6 +79,13 @@ export async function get(user, projectId, executor = db) {
   };
 }
 
+// The project description, for the students who open it from their board.
+// A board is read again after every change, so it does not carry it.
+export async function description(user, projectId) {
+  const { project } = await projectAccess(db, user, projectId);
+  return { id: project.id, name: project.name, description_html: renderMarkdown(project.description) };
+}
+
 // Administrators and teachers create projects. A teacher who creates one is
 // assigned to it, which is what gives them access from then on.
 export async function create(user, body) {

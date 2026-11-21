@@ -103,8 +103,9 @@ Clients also send the state they last saw (`expected_status`). If it no longer
 matches, the API answers `409 stale_task` and the board reloads, instead of
 applying a change on top of someone else's.
 
-The transition policy lives in one function. The API returns
-`allowed_transitions` with every task, and the frontend offers exactly those
+The transition policy lives in one function. The API returns the
+allowed targets (`allowed_transitions` with a single task, and `transitions`,
+once per state, with a whole board), and the frontend offers exactly those
 targets, both for drag-and-drop and for the accessible "Mou a…" control.
 
 Transactions retry automatically on InnoDB deadlocks.

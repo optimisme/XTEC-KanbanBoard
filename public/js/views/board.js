@@ -8,7 +8,14 @@ import {
 import { changeTaskStatus, openTaskModal } from './taskModal.js';
 
 export async function renderBoard(view, [groupId, openTaskId], { user, rerender }) {
-  let board = await api.get(`/api/groups/${groupId}/board`);
+  // What a task may move to is the same for every card in the same state, so
+  // the board says it once: here each card gets its own list back.
+  async function readBoard() {
+    const fresh = await api.get(`/api/groups/${groupId}/board`);
+    for (const task of fresh.tasks) task.allowed_transitions = fresh.transitions[task.status];
+    return fresh;
+  }
+  let board = await readBoard();
   const boardEl = h('div', { class: 'board' });
   const infoEl = h('div', { class: 'board-info' });
   const peopleEl = h('span', { class: 'board-people' });
@@ -33,9 +40,16 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
   const canEdit = () => editing && board.project.status === 'active';
 
   let reads = 0;
+  let reading = 0;
   async function refresh() {
     const read = ++reads;
-    const fresh = await api.get(`/api/groups/${groupId}/board`);
+    reading += 1;
+    let fresh;
+    try {
+      fresh = await readBoard();
+    } finally {
+      reading -= 1;
+    }
     if (read !== reads) return; // A newer read is on its way.
     board = fresh;
     draw();
@@ -47,8 +61,19 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
   // an open "Mou a…" list, so it waits until those are over.
   let remotePending = false;
   let remoteTimer = null;
+  // Whether what changed has to be read from the server.
+  let remoteRead = false;
   const busy = () => dragged || (boardEl.contains(document.activeElement) && document.activeElement.tagName === 'SELECT');
-  function remoteChange() {
+  function remoteChange(notice = {}) {
+    // A new comment only moves the counter of its card: that is counted
+    // here. Anything else, or a comment that arrives while the board is
+    // being read (the answer may be older than it), is read again.
+    const commented = notice.kind === 'comment' && reading === 0 ? board.tasks.find((t) => t.id === notice.task_id) : null;
+    if (commented) commented.comment_count += 1;
+    else remoteRead = true;
+    remoteSoon();
+  }
+  function remoteSoon() {
     clearTimeout(remoteTimer);
     remoteTimer = setTimeout(async () => {
       if (!boardEl.isConnected) return;
@@ -57,6 +82,11 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
         return;
       }
       remotePending = false;
+      if (!remoteRead) {
+        draw();
+        return;
+      }
+      remoteRead = false;
       try {
         await refresh();
       } catch (err) {
@@ -65,7 +95,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
       }
     }, 200);
   }
-  const resumeRemote = () => remotePending && remoteChange();
+  const resumeRemote = () => remotePending && remoteSoon();
   boardEl.addEventListener('focusout', () => setTimeout(resumeRemote, 0));
 
   // Marks the cards other people are dragging, and where they are heading.
@@ -422,7 +452,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
     // "Finalitzat" lists tasks in the order they were completed (first one
     // on top). Every other column keeps the global project order.
     if (status === 'completed') {
-      tasks.sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at) || a.sort_order - b.sort_order);
+      tasks.sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at) || a.position - b.position);
     }
     const el = h('section', { class: `column ${status}`, 'data-status': status, 'aria-label': STATUS_LABELS[status] },
       h('div', { class: 'column-header' },
@@ -498,14 +528,16 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
   }
 
   // The project description, for students (staff read it in the project page).
-  function showDescription() {
+  // It is read when asked for: the board itself does not carry it.
+  async function showDescription() {
+    const project = await api.get(`/api/projects/${board.project.id}/description`);
     modal({
-      title: board.project.name,
+      title: project.name,
       wide: true,
       // Never taller than the window: a long description scrolls inside.
       fit: true,
-      body: board.project.description_html
-        ? h('div', { class: 'tab-scroll', tabindex: '0' }, h('div', { class: 'markdown', html: board.project.description_html }))
+      body: project.description_html
+        ? h('div', { class: 'tab-scroll', tabindex: '0' }, h('div', { class: 'markdown', html: project.description_html }))
         : h('p', { class: 'muted' }, 'Aquest projecte no té descripció.'),
     });
   }
@@ -527,7 +559,7 @@ export async function renderBoard(view, [groupId, openTaskId], { user, rerender 
         !board.can_manage && board.project.ranking_visible
           ? h('a', { class: 'btn', href: `#/projects/${board.project.id}/ranking` }, '🤝 Insígnies')
           : null,
-        board.can_manage ? null : h('button', { class: 'btn', type: 'button', onClick: showDescription }, 'Descripció'))),
+        board.can_manage ? null : h('button', { class: 'btn', type: 'button', onClick: () => showDescription().catch(showError) }, 'Descripció'))),
     infoEl,
     board.tasks.length === 0 ? h('div', { class: 'notice' }, 'Aquest projecte encara no té tasques.') : null,
     boardEl

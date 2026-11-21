@@ -134,9 +134,15 @@ export const openBoardChannel = (groupId, handlers) => open({ type: 'subscribe',
 // after the last notice, so a burst of changes costs one read) whenever
 // something changes in any of them. `el` is the page's own element: nothing
 // is opened unless it really reached the screen, and nothing runs once it left.
+//
+// A notice says what kind of change it was (`kind`: status, people, comment,
+// links, project). None of the pages that follow whole projects show comments
+// or a group's links, so those are not read again for them.
+const UNSEEN_KINDS = new Set(['comment', 'links']);
 export function followProjects(el, projectIds, reload) {
   let timer = null;
-  const onChange = () => {
+  const onChange = (notice) => {
+    if (UNSEEN_KINDS.has(notice.kind)) return;
     clearTimeout(timer);
     timer = setTimeout(async () => {
       if (!el.isConnected) return;

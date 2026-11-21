@@ -97,6 +97,28 @@ export async function isTeacher(db, projectId, userId) {
   return rows.length > 0;
 }
 
+// Which of these projects the person can see, in one query. The rules are the
+// ones of accessService.projectAccess.
+export async function visibleIds(db, user, projectIds) {
+  if (projectIds.length === 0) return [];
+  let rows = [];
+  if (user.role === 'admin') {
+    rows = await db.query('SELECT id FROM projects WHERE id IN (?)', [projectIds]);
+  } else if (user.role === 'teacher') {
+    rows = await db.query('SELECT project_id AS id FROM project_teachers WHERE user_id = ? AND project_id IN (?)', [
+      user.id,
+      projectIds,
+    ]);
+  } else if (user.role === 'student') {
+    rows = await db.query(
+      `SELECT p.id FROM projects p JOIN group_students gs ON gs.project_id = p.id AND gs.user_id = ?
+        WHERE p.hidden = 0 AND p.id IN (?)`,
+      [user.id, projectIds]
+    );
+  }
+  return rows.map((row) => row.id);
+}
+
 export async function addTeacher(db, projectId, userId) {
   await db.query('INSERT IGNORE INTO project_teachers (project_id, user_id) VALUES (?, ?)', [projectId, userId]);
 }

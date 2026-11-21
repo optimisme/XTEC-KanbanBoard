@@ -11,7 +11,8 @@ import { assertWritable, groupAccess, groupTaskAccess, groupTaskAccessById } fro
 export const STATUSES = ['pending', 'in_progress', 'blocked', 'completed'];
 
 // Transition policy. This is the single source of truth: the API also sends
-// the allowed targets of each task to the frontend, which only offers those.
+// the allowed targets to the frontend, which only offers those (with each
+// task, and once per state for a whole board).
 const STUDENT_TRANSITIONS = {
   pending: ['in_progress'],
   in_progress: ['pending', 'blocked', 'completed'],
@@ -75,19 +76,23 @@ export async function board(user, groupId) {
       hidden: Boolean(access.project.hidden),
       // Whether students get the link to the groups' teamwork badges.
       ranking_visible: Boolean(access.project.ranking_visible),
-      // Students read the project description from their board.
-      description_html: renderMarkdown(access.project.description),
     },
     group: access.group,
     access: access.level,
     can_manage: access.canManage,
     members,
+    // What a task in each state may move to. It is the same for every card of
+    // a board, so it is sent once instead of with each one.
+    transitions: Object.fromEntries(STATUSES.map((status) => [status, allowedTransitions(access, status)])),
     // `position` is the task's number in the project's global order, the same
-    // one the task list and the matrix show.
-    tasks: rows.map((row, index) => ({
-      ...presentCard(row, tags.get(row.task_id), collaborators.get(row.id), access, user),
-      position: index + 1,
-    })),
+    // one the task list and the matrix show. A board is read again after
+    // every change, so its cards carry only what a card shows.
+    tasks: rows.map((row, index) => {
+      const { group_id: _group, sort_order: _order, allowed_transitions: _moves, ...card } = presentCard(
+        row, tags.get(row.task_id), collaborators.get(row.id), access, user
+      );
+      return { ...card, position: index + 1 };
+    }),
   };
 }
 
@@ -117,7 +122,6 @@ export async function detail(user, groupTaskId) {
     definition: {
       id: definition.id,
       version: definition.version,
-      description: definition.description,
       description_html: renderMarkdown(definition.description),
       updated_at: definition.updated_at,
     },

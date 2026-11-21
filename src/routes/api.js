@@ -4,7 +4,7 @@ import * as auth from '../controllers/authController.js';
 import * as groupTasks from '../controllers/groupTaskController.js';
 import * as projects from '../controllers/projectController.js';
 import { requireActive, requireRole } from '../middleware/auth.js';
-import { notifyBoards } from '../realtime/notify.js';
+import { notice, notifyBoards, quiet } from '../realtime/notify.js';
 
 const router = Router();
 const adminOnly = requireRole('admin');
@@ -49,11 +49,12 @@ router.delete('/tags/:tagId', projects.deleteTag);
 router.get('/projects', projects.list);
 router.post('/projects', projects.create);
 router.get('/projects/:projectId', projects.get);
+router.get('/projects/:projectId/description', projects.description);
 router.put('/projects/:projectId', projects.update);
 router.delete('/projects/:projectId', projects.remove);
 router.post('/projects/:projectId/archive', projects.archive);
 router.post('/projects/:projectId/unarchive', projects.unarchive);
-router.post('/projects/:projectId/duplicate', projects.duplicate);
+router.post('/projects/:projectId/duplicate', quiet, projects.duplicate);
 router.put('/projects/:projectId/teachers', projects.setTeachers);
 router.post('/projects/:projectId/teachers', projects.addTeacher);
 router.delete('/projects/:projectId/teachers/:userId', projects.removeTeacher);
@@ -62,8 +63,8 @@ router.delete('/projects/:projectId/teachers/:userId', projects.removeTeacher);
 router.post('/projects/:projectId/groups', projects.createGroup);
 router.put('/groups/:groupId/students', projects.setGroupStudents);
 router.delete('/groups/:groupId', projects.deleteGroup);
-router.put('/groups/:groupId/github', projects.setGithubUrl);
-router.put('/groups/:groupId/web', projects.setWebUrl);
+router.put('/groups/:groupId/github', notice('links'), projects.setGithubUrl);
+router.put('/groups/:groupId/web', notice('links'), projects.setWebUrl);
 router.get('/groups/:groupId/board', groupTasks.board);
 
 // Shared task definitions
@@ -77,16 +78,16 @@ router.get('/tasks/:taskId/versions', projects.taskVersions);
 
 // Initial Markdown import
 router.get('/projects/:projectId/import/template', projects.importTemplate);
-router.post('/projects/:projectId/import/preview', projects.importPreview);
+router.post('/projects/:projectId/import/preview', quiet, projects.importPreview);
 router.post('/projects/:projectId/import', projects.importTasks);
 
 // Group tasks (Kanban)
 router.get('/group-tasks/:groupTaskId', groupTasks.detail);
-router.post('/group-tasks/:groupTaskId/status', groupTasks.changeStatus);
-router.post('/group-tasks/:groupTaskId/responsible', groupTasks.transferResponsibility);
-router.post('/group-tasks/:groupTaskId/collaborators', groupTasks.addCollaborator);
-router.delete('/group-tasks/:groupTaskId/collaborators/:userId', groupTasks.removeCollaborator);
-router.post('/group-tasks/:groupTaskId/comments', groupTasks.addComment);
+router.post('/group-tasks/:groupTaskId/status', notice('status'), groupTasks.changeStatus);
+router.post('/group-tasks/:groupTaskId/responsible', notice('people'), groupTasks.transferResponsibility);
+router.post('/group-tasks/:groupTaskId/collaborators', notice('people'), groupTasks.addCollaborator);
+router.delete('/group-tasks/:groupTaskId/collaborators/:userId', notice('people'), groupTasks.removeCollaborator);
+router.post('/group-tasks/:groupTaskId/comments', notice('comment'), groupTasks.addComment);
 router.get('/group-tasks/:groupTaskId/history', groupTasks.history);
 
 // Supervision

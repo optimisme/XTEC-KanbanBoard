@@ -9,8 +9,9 @@
 import { WebSocketServer } from 'ws';
 import config from '../config/index.js';
 import { db } from '../db/pool.js';
+import * as projectRepo from '../repositories/projectRepository.js';
 import * as userRepo from '../repositories/userRepository.js';
-import { groupAccess, projectAccess } from '../services/accessService.js';
+import { groupAccess } from '../services/accessService.js';
 import { STATUSES } from '../services/groupTaskService.js';
 
 const PATH = '/ws';
@@ -22,7 +23,10 @@ const RATE_WINDOW_MS = 10 * 1000;
 // Proxies drop silent connections (Cloudflare after about 100 seconds).
 const HEARTBEAT_MS = 30 * 1000;
 // A socket lives for hours, so its permissions are checked again regularly.
+// Each socket has its own minute, so a whole class that connected at the same
+// time is not checked in the same instant.
 const RECHECK_MS = 60 * 1000;
+const RECHECK_SWEEP_MS = 5 * 1000;
 
 // Close codes the browser understands.
 export const CLOSE_SIGNED_OUT = 4401;
@@ -87,15 +91,7 @@ async function subscribe(ws, groupId) {
 // Follows whole projects instead of one board. The list replaces the previous
 // one, and only the projects the person can see are kept.
 async function watch(ws, projectIds) {
-  const allowed = new Set();
-  for (const projectId of projectIds) {
-    try {
-      await projectAccess(db, ws.state.account, projectId);
-      allowed.add(projectId);
-    } catch {
-      // Not theirs: left out.
-    }
-  }
+  const allowed = new Set(await projectRepo.visibleIds(db, ws.state.account, [...new Set(projectIds)]));
   ws.state.watch = allowed;
   send(ws, { type: 'watching', project_ids: [...allowed] });
 }
@@ -138,29 +134,40 @@ async function onMessage(ws, raw) {
 const sessionExists = (sessionId) =>
   new Promise((resolve) => sessionStore.get(sessionId, (err, session) => resolve(Boolean(!err && session && session.userId))));
 
+// The board and the projects a socket follows are still theirs to see. With a
+// project, only what belongs to that project is looked at.
+async function recheckAccess(ws, projectId = null) {
+  try {
+    const { account, room, watch: watched } = ws.state;
+    if (room && (projectId === null || room.projectId === projectId)) await groupAccess(db, account, room.groupId);
+    const ids = [...watched].filter((id) => projectId === null || id === projectId);
+    const visible = new Set(await projectRepo.visibleIds(db, account, ids));
+    for (const id of ids) {
+      if (visible.has(id)) continue;
+      // One last notice, so the page reads again and finds out it lost access.
+      watched.delete(id);
+      send(ws, { type: 'project_changed', project_id: id, origin: '' });
+    }
+  } catch {
+    return ws.close(CLOSE_DENIED, 'denied');
+  }
+  return true;
+}
+
 // Applies what the REST API applies on every request: the session is still
 // open, the account is still active and the board is still theirs to see.
 async function recheck(ws) {
+  ws.state.checkedAt = Date.now();
   try {
     if (!(await sessionExists(ws.state.sessionId))) return ws.close(CLOSE_SIGNED_OUT, 'signed out');
     const account = await userRepo.findById(db, ws.state.user.id);
     if (!account || account.status !== 'active') return ws.close(CLOSE_DENIED, 'denied');
     ws.state.account = account;
     ws.state.user = { id: account.id, name: account.name, role: account.role };
-    if (ws.state.room) await groupAccess(db, account, ws.state.room.groupId);
-    for (const projectId of [...ws.state.watch]) {
-      try {
-        await projectAccess(db, account, projectId);
-      } catch {
-        // One last notice, so the page reads again and finds out it lost access.
-        ws.state.watch.delete(projectId);
-        send(ws, { type: 'project_changed', project_id: projectId, origin: '' });
-      }
-    }
   } catch {
     return ws.close(CLOSE_DENIED, 'denied');
   }
-  return true;
+  return recheckAccess(ws);
 }
 
 // ---- Used by the REST API ---------------------------------------------------------
@@ -175,12 +182,13 @@ export function publishGroup(groupId, projectId, message) {
 }
 
 // Something shared by the whole project changed (tasks, tags, members, the
-// project itself). It may have changed who can see what, so every socket is
-// checked again before it is told.
+// project itself). It may have changed who can see what in this project, so
+// that is checked again for every socket before it is told. Sessions and
+// accounts are not: a change to those reaches the channel by itself.
 export async function publishProject(projectId, message) {
   await Promise.all(
     [...new Set([...inProject(projectId), ...watching(projectId)])].map(async (ws) => {
-      if ((await recheck(ws)) !== true) return;
+      if ((await recheckAccess(ws, projectId)) !== true) return;
       if (ws.state.room && ws.state.room.projectId === projectId) send(ws, message);
       if (ws.state.watch.has(projectId)) send(ws, { ...message, type: 'project_changed', project_id: projectId });
     })
@@ -233,6 +241,8 @@ export function attachRealtime(server, app) {
             watch: new Set(),
             drag: null,
             alive: true,
+            // Somewhere in the last minute: see RECHECK_MS.
+            checkedAt: Date.now() - Math.floor(Math.random() * RECHECK_MS),
             messages: 0,
             windowStart: Date.now(),
           };
@@ -262,8 +272,9 @@ export function attachRealtime(server, app) {
     }
   }, HEARTBEAT_MS);
   const rechecks = setInterval(() => {
-    for (const ws of clients) recheck(ws);
-  }, RECHECK_MS);
+    const now = Date.now();
+    for (const ws of clients) if (now - ws.state.checkedAt >= RECHECK_MS) recheck(ws);
+  }, RECHECK_SWEEP_MS);
   heartbeat.unref();
   rechecks.unref();
 
